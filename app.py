@@ -70,7 +70,7 @@ col_logo, col_title = st.columns([1, 5])
 with col_logo:
     st.markdown("<h1 style='text-align: center;'>💎</h1>", unsafe_allow_html=True)
 with col_title:
-    st.title("SHM 二手智能鑑價中心")
+    st.title("SHM 二手AI智能鑑價中心")
     st.markdown("##### 🚀 AI 視覺鑑價 / 市場大數據分析")
 
 st.divider()
@@ -93,7 +93,7 @@ with tab1:
     
     col_upload, col_empty = st.columns([2, 1])
     with col_upload:
-        uploaded_files = st.file_uploader("拖曳或點擊上傳商品照片...", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+        uploaded_files = st.file_uploader("拖曳或點擊上傳商品照片...，可多拍攝幾張以增加商品估價準確性", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
 
     if uploaded_files:
         st.write("##### 📸 預覽：")
