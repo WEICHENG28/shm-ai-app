@@ -217,6 +217,62 @@ with tab1:
                         </div>
                         """, unsafe_allow_html=True)
 
+                st.divider()
+
+                # === 🚀 核心商業功能：一鍵上架 (Lead Generation) ===
+                st.markdown("""
+                <div style="background-color: #FFF3CD; padding: 20px; border-radius: 10px; border: 1px solid #FFEEBA; margin-bottom: 20px;">
+                    <h3 style="color: #856404; margin: 0;">💰 滿意這個價格嗎？</h3>
+                    <p style="color: #856404; margin-top: 5px;">我們的 AI 已經幫您準備好拍賣文案，現在上架，最快 24 小時內成交！</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+                with st.expander("📝 點擊展開「一鍵上架表單」 (AI 自動填寫)", expanded=True):
+                    with st.form("sell_form"):
+                        st.caption("以下資料由 AI 自動生成，您可以自由修改：")
+                        
+                        # 1. 自動帶入標題
+                        default_title = f"【AI認證】{data.get('brand')} {data.get('model')} - {data.get('condition_score')}成新"
+                        title = st.text_input("商品標題", value=default_title)
+                        
+                        # 2. 自動帶入價格 (取區間平均值)
+                        try:
+                            prices = [int(s) for s in ai_price_range.split() if s.isdigit()]
+                            avg_price = int(sum(prices)/len(prices)) if prices else 500
+                        except:
+                            avg_price = 500
+                        price = st.number_input("預售價格 (TWD)", value=avg_price, step=50)
+                        
+                        # 3. 自動生成文案
+                        default_desc = f"""
+商品型號：{data.get('model')}
+新舊程度：{data.get('condition_score')}/10
+專家短評：{data.get('analysis')}
+
+此商品經由 SHM AI 智能鑑價系統認證。
+                        """
+                        desc = st.text_area("商品描述", value=default_desc.strip(), height=150)
+                        
+                        # 4. 收集賣家資料
+                        col_contact1, col_contact2 = st.columns(2)
+                        with col_contact1:
+                            seller_name = st.text_input("您的稱呼")
+                        with col_contact2:
+                            contact_info = st.text_input("聯絡方式 (Line/Email)")
+                        
+                        # 送出按鈕
+                        submitted = st.form_submit_button("🚀 確認上架 (模擬)")
+                        
+                        if submitted:
+                            if not contact_info:
+                                st.error("請填寫聯絡方式，以便買家聯繫您！")
+                            else:
+                                st.balloons() # 慶祝特效
+                                st.success(f"""
+                                ✅ **上架成功！** 您的商品「{title}」已進入 SHM 平台審核隊列。
+                                我們將透過 {contact_info} 與您聯繫後續物流事宜。
+                                """)
+
             except Exception as e:
                 st.error(f"分析失敗: {e}")
 
