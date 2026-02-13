@@ -6,42 +6,69 @@ import scraper
 import shutil
 import time
 
-# 設定網頁標題與寬度配置
+# 設定網頁標題
 st.set_page_config(page_title="SHM 智能鑑價網", page_icon="💎", layout="wide")
 
-# 自訂 CSS (優化卡片顯示)
+# === 🎨 介面美化：專業電商白風格 ===
 st.markdown("""
     <style>
-    .stApp {background-color: #1E1E1E;}
+    /* 全站背景設定為乾淨的灰白色，讓卡片更突出 */
+    .stApp {
+        background-color: #F0F2F6;
+    }
+    
+    /* 核心數據卡片 (白底 + 陰影) */
     .metric-box {
-        background-color: #262730;
+        background-color: #FFFFFF;
         padding: 20px;
-        border-radius: 10px;
-        border-left: 5px solid #F63366;
+        border-radius: 12px;
+        border-left: 5px solid #FF4B4B;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08); /* 輕微陰影增加質感 */
         margin-bottom: 10px;
     }
+    
+    /* 二手商品卡片 */
     .used-item {
-        background-color: #31333F;
+        background-color: #FFFFFF;
         padding: 15px;
-        border-radius: 8px;
+        border-radius: 10px;
         margin-bottom: 10px;
-        border: 1px solid #555;
+        border: 1px solid #E0E0E0; /* 淺灰邊框 */
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        color: #333333; /* 深色文字 */
     }
+    
+    /* 新品卡片 (綠色邊框強調) */
     .new-item {
-        background-color: #1E4620; /* 深綠色背景代表新品 */
+        background-color: #F9FFF9; /* 極淺綠底 */
         padding: 15px;
-        border-radius: 8px;
+        border-radius: 10px;
         margin-bottom: 10px;
         border: 1px solid #28a745;
+        color: #333333;
     }
-    a {text-decoration: none; color: #4DA6FF !important;}
+    
+    /* 按鈕樣式優化 */
+    .stButton>button {
+        border-radius: 20px;
+        font-weight: bold;
+    }
+    
+    /* 連結顏色 */
+    a {text-decoration: none; color: #0066CC !important;}
+    a:hover {color: #FF4B4B !important;}
+    
+    /* 標題優化 */
+    h1, h2, h3 {
+        color: #111111 !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
 # 標題區
 col_logo, col_title = st.columns([1, 5])
 with col_logo:
-    st.markdown("<h1>💎</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>💎</h1>", unsafe_allow_html=True)
 with col_title:
     st.title("SHM 二手智能鑑價中心")
     st.markdown("##### 🚀 AI 視覺鑑價 / 市場大數據分析")
@@ -51,7 +78,7 @@ st.divider()
 # 側邊欄
 with st.sidebar:
     st.header("⚙️ 系統選單")
-    st.info("系統狀態：連線正常")
+    st.success("🟢 系統狀態：連線正常")
     st.markdown("---")
     st.write("📸 **拍攝指南**")
     st.caption("1. 正面：確認款式")
@@ -98,20 +125,17 @@ with tab1:
                 json_str = raw_result.replace("```json", "").replace("```", "").strip()
                 data = json.loads(json_str)
                 
-                # 2. 獲取市場數據 (雙引擎)
+                # 2. 獲取市場數據
                 status_text.text("📊 正在分析二手市場行情 & 比對新品價格...")
                 progress_bar.progress(60)
                 
-                # 準備關鍵字
                 raw_model = data.get('model', '')
                 clean_model = raw_model.split('(')[0].strip()
                 search_query = f"{data.get('brand')} {clean_model}"
                 
-                # 引擎 A: 二手行情 (模擬數據)
+                # 雙引擎搜尋
                 ai_price_range = data.get('estimated_price_range', 'NT$500 - NT$1000')
                 used_items = scraper.get_used_market_data(search_query, ai_price_range)
-                
-                # 引擎 B: 新品行情 (PChome)
                 new_item = scraper.get_new_price_pchome(search_query)
                 
                 progress_bar.progress(100)
@@ -125,33 +149,32 @@ with tab1:
                 
                 c1, c2, c3 = st.columns(3)
                 with c1:
-                    st.markdown(f"""<div class="metric-box"><h4>❤️ 新舊評分</h4><h1 style="color:#F63366;">{data.get('condition_score')}/10</h1></div>""", unsafe_allow_html=True)
+                    st.markdown(f"""<div class="metric-box"><h4>❤️ 新舊評分</h4><h1 style="color:#FF4B4B;">{data.get('condition_score')}/10</h1></div>""", unsafe_allow_html=True)
                 with c2:
-                    st.markdown(f"""<div class="metric-box"><h4>💰 二手估價 (TWD)</h4><h2 style="color:#00CC96;">{data.get('estimated_price_range')}</h2></div>""", unsafe_allow_html=True)
+                    st.markdown(f"""<div class="metric-box"><h4>💰 二手估價 (TWD)</h4><h2 style="color:#28a745;">{data.get('estimated_price_range')}</h2></div>""", unsafe_allow_html=True)
                 with c3:
-                    st.markdown(f"""<div class="metric-box"><h4>🧐 專家簡評</h4><p>{data.get('analysis')}</p></div>""", unsafe_allow_html=True)
+                    st.markdown(f"""<div class="metric-box"><h4>🧐 專家簡評</h4><p style="color:#555;">{data.get('analysis')}</p></div>""", unsafe_allow_html=True)
                 
                 st.divider()
 
-                # === 顯示區塊 2: 二手市場行情 (這是使用者最在意的) ===
+                # === 顯示區塊 2: 二手市場行情 ===
                 st.subheader("📉 二手市場成交參考")
                 st.caption(f"根據 {search_query} 的近期市場數據分析：")
                 
                 u_col1, u_col2 = st.columns(2)
                 for i, item in enumerate(used_items):
-                    if i < 4: # 只顯示前4筆
+                    if i < 4:
                         with (u_col1 if i % 2 == 0 else u_col2):
                             st.markdown(f"""
                             <div class="used-item">
-                                <span style="background-color: #555; color: white; padding: 2px 6px; border-radius: 4px; font-size: 10px;">{item['platform']}</span>
-                                <span style="float: right; color: #aaa; font-size: 12px;">{item['tag']}</span>
+                                <span style="background-color: #E0E0E0; color: #333; padding: 2px 8px; border-radius: 4px; font-size: 11px;">{item['platform']}</span>
+                                <span style="float: right; color: #666; font-size: 12px;">{item['tag']}</span>
                                 <br>
-                                <b style="color:white; font-size: 14px;">{item['title']}</b><br>
-                                <span style="font-size: 20px; color: #FFD700; font-weight: bold;">NT$ {item['price']:,}</span><br>
+                                <b style="color:#222; font-size: 15px;">{item['title']}</b><br>
+                                <span style="font-size: 20px; color: #D93025; font-weight: bold;">NT$ {item['price']:,}</span><br>
                             </div>
                             """, unsafe_allow_html=True)
                 
-                # 台灣交易平台傳送門
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.markdown("**🔎 前往平台查看即時商品：**")
                 shopee_url = f"https://shopee.tw/search?keyword={search_query}"
@@ -165,11 +188,10 @@ with tab1:
 
                 st.divider()
 
-                # === 顯示區塊 3: 新品價格對照 (PChome) ===
+                # === 顯示區塊 3: 新品價格對照 ===
                 if new_item:
                     st.subheader("🆕 新品原價對照 (PChome 24h)")
                     
-                    # 計算 CP 值
                     try:
                         prices = [int(s) for s in ai_price_range.split() if s.isdigit()]
                         avg_used = sum(prices)/len(prices) if prices else 0
@@ -177,11 +199,10 @@ with tab1:
                         save_money = new_price - avg_used
                         
                         if save_money > 0:
-                            st.success(f"🔥 買二手超划算！相比新品約可省下 **NT$ {int(save_money):,}**")
+                            st.info(f"🔥 買二手超划算！相比新品約可省下 **NT$ {int(save_money):,}**")
                     except:
                         pass
 
-                    # 顯示新品卡片
                     col_new_img, col_new_info = st.columns([1, 3])
                     with col_new_img:
                          if new_item['image']:
@@ -190,8 +211,8 @@ with tab1:
                         st.markdown(f"""
                         <div class="new-item">
                             <b style="color:#28a745;">[全新品] 目前售價</b><br>
-                            <span style="font-size: 16px; color: white;">{new_item['title']}</span><br>
-                            <span style="font-size: 24px; color: #fff; font-weight: bold;">NT$ {new_item['price']:,}</span><br>
+                            <span style="font-size: 16px; color: #333;">{new_item['title']}</span><br>
+                            <span style="font-size: 24px; color: #111; font-weight: bold;">NT$ {new_item['price']:,}</span><br>
                             <a href="{new_item['link']}" target="_blank">🔗 前往 PChome 賣場</a>
                         </div>
                         """, unsafe_allow_html=True)
