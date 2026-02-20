@@ -1,8 +1,9 @@
 import google.generativeai as genai
 import PIL.Image
+import streamlit as st
 
-# 🔒 你的 API KEY
-GOOGLE_API_KEY = "AIzaSyC8DX-vtm_SlH-K2hZOo6karZZMn84tAR8"
+# 🔒 從 Streamlit 的隱藏密碼庫讀取 API KEY (絕對不要把密碼明碼寫在這裡！)
+GOOGLE_API_KEY = st.secrets["GEMINI_API_KEY"]
 
 genai.configure(api_key=GOOGLE_API_KEY)
 # 使用我們確認過能用的模型名稱
