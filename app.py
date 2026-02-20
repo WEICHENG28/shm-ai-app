@@ -6,6 +6,9 @@ import scraper
 import shutil
 import time
 import re
+import gspread
+from google.oauth2.service_account import Credentials
+from datetime import datetime
 
 # 設定網頁標題
 st.set_page_config(page_title="SHM 智能鑑價網", page_icon="💎", layout="wide")
@@ -194,7 +197,6 @@ with tab1:
                     st.subheader("🆕 新品原價對照 (PChome 24h)")
                     
                     try:
-                        # 關鍵修復：加入正則表達式，處理帶有逗號的價格字串 (例如 "1,800")
                         clean_str = ai_price_range.replace(',', '')
                         prices = [int(n) for n in re.findall(r'\d+', clean_str)]
                         avg_used = sum(prices)/len(prices) if prices else 0
@@ -238,9 +240,8 @@ with tab1:
                         default_title = f"【AI認證】{data.get('brand')} {data.get('model')} - {data.get('condition_score')}成新"
                         title = st.text_input("商品標題", value=default_title)
                         
-                        # 2. 自動帶入價格 (取區間平均值)
+                        # 2. 自動帶入價格
                         try:
-                            # 關鍵修復：處理帶有逗號的價格字串
                             clean_str = ai_price_range.replace(',', '')
                             prices = [int(n) for n in re.findall(r'\d+', clean_str)]
                             avg_price = int(sum(prices)/len(prices)) if prices else 500
@@ -266,17 +267,49 @@ with tab1:
                             contact_info = st.text_input("聯絡方式 (Line/Email)")
                         
                         # 送出按鈕
-                        submitted = st.form_submit_button("🚀 確認上架 (模擬)")
+                        submitted = st.form_submit_button("🚀 確認上架")
                         
                         if submitted:
                             if not contact_info:
                                 st.error("請填寫聯絡方式，以便買家聯繫您！")
                             else:
-                                st.balloons() # 慶祝特效
-                                st.success(f"""
-                                ✅ **上架成功！** 您的商品「{title}」已進入 SHM 平台審核隊列。
-                                我們將透過 {contact_info} 與您聯繫後續物流事宜。
-                                """)
+                                with st.spinner("🔄 正在安全寫入系統資料庫..."):
+                                    try:
+                                        # --- 1. 讀取隱藏金鑰 ---
+                                        key_dict = json.loads(st.secrets["google_credentials"])
+                                        scopes = [
+                                            "https://www.googleapis.com/auth/spreadsheets",
+                                            "https://www.googleapis.com/auth/drive"
+                                        ]
+                                        creds = Credentials.from_service_account_info(key_dict, scopes=scopes)
+                                        client = gspread.authorize(creds)
+                                        
+                                        # --- 2. 連線到 Google Sheet ---
+                                        sheet = client.open("SHM_Database").sheet1
+                                        
+                                        # --- 3. 整理要寫入的資料 ---
+                                        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                        row_data = [
+                                            current_time,           # A欄: 時間
+                                            title,                  # B欄: 標題
+                                            str(price),             # C欄: 價格
+                                            f"{data.get('condition_score')}/10", # D欄: 評分
+                                            seller_name,            # E欄: 賣家稱呼
+                                            contact_info,           # F欄: 聯絡方式
+                                            desc                    # G欄: 描述
+                                        ]
+                                        
+                                        # --- 4. 執行寫入動作 ---
+                                        sheet.append_row(row_data)
+                                        
+                                        st.balloons() 
+                                        st.success(f"""
+                                        ✅ **上架成功！** 您的商品「{title}」已安全建檔進入雲端資料庫。
+                                        我們將透過 {contact_info} 與您聯繫後續事宜。
+                                        """)
+                                        
+                                    except Exception as e:
+                                        st.error(f"❌ 資料庫連線失敗，請確認是否已給予機器人「編輯者」權限: {e}")
 
             except Exception as e:
                 st.error(f"分析失敗: {e}")
