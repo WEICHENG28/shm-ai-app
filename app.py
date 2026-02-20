@@ -5,6 +5,7 @@ import ai_engine
 import scraper
 import shutil
 import time
+import re
 
 # 設定網頁標題
 st.set_page_config(page_title="SHM 智能鑑價網", page_icon="💎", layout="wide")
@@ -193,7 +194,9 @@ with tab1:
                     st.subheader("🆕 新品原價對照 (PChome 24h)")
                     
                     try:
-                        prices = [int(s) for s in ai_price_range.split() if s.isdigit()]
+                        # 關鍵修復：加入正則表達式，處理帶有逗號的價格字串 (例如 "1,800")
+                        clean_str = ai_price_range.replace(',', '')
+                        prices = [int(n) for n in re.findall(r'\d+', clean_str)]
                         avg_used = sum(prices)/len(prices) if prices else 0
                         new_price = int(new_item['price'])
                         save_money = new_price - avg_used
@@ -219,7 +222,7 @@ with tab1:
 
                 st.divider()
 
-                # === 🚀 核心商業功能：一鍵上架 (Lead Generation) ===
+                # === 🚀 核心商業功能：一鍵上架 ===
                 st.markdown("""
                 <div style="background-color: #FFF3CD; padding: 20px; border-radius: 10px; border: 1px solid #FFEEBA; margin-bottom: 20px;">
                     <h3 style="color: #856404; margin: 0;">💰 滿意這個價格嗎？</h3>
@@ -237,7 +240,9 @@ with tab1:
                         
                         # 2. 自動帶入價格 (取區間平均值)
                         try:
-                            prices = [int(s) for s in ai_price_range.split() if s.isdigit()]
+                            # 關鍵修復：處理帶有逗號的價格字串
+                            clean_str = ai_price_range.replace(',', '')
+                            prices = [int(n) for n in re.findall(r'\d+', clean_str)]
                             avg_price = int(sum(prices)/len(prices)) if prices else 500
                         except:
                             avg_price = 500

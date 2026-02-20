@@ -1,16 +1,18 @@
 import requests
 import random
 import urllib.parse
+import re
 
 def get_used_market_data(keyword, price_range_str):
     """
     【二手行情引擎】
     基於 AI 的估價區間，生成高度逼真的「市場行情數據」。
-    這在 Demo 時比爬蟲更穩定，且能展示「系統有在分析歷史數據」的感覺。
     """
-    # 1. 解析價格區間 (例如 "NT$600 - NT$900")
     try:
-        nums = [int(s) for s in price_range_str.split() if s.isdigit()]
+        # 關鍵修復：去除逗號，並使用正則表達式精準抓取數字
+        clean_str = price_range_str.replace(',', '')
+        nums = [int(n) for n in re.findall(r'\d+', clean_str)]
+        
         if len(nums) >= 2:
             min_p, max_p = nums[0], nums[1]
         else:
@@ -35,7 +37,7 @@ def get_used_market_data(keyword, price_range_str):
             "price": random_price,
             "platform": src['platform'],
             "tag": src['tag'],
-            "link": f"https://www.google.com/search?q={keyword} 二手" # 導引到 Google 搜尋
+            "link": f"https://www.google.com/search?q={keyword} 二手" 
         }
         items.append(item)
         
@@ -51,11 +53,11 @@ def get_new_price_pchome(keyword):
     url = f"https://ecshweb.pchome.com.tw/search/v3.3/all/results?q={encoded_keyword}&page=1&sort=sale/dc"
     
     try:
-        response = requests.get(url, timeout=3) # 設定短一點的 timeout
+        response = requests.get(url, timeout=3)
         if response.status_code == 200:
             data = response.json()
             if 'prods' in data and data['prods']:
-                prod = data['prods'][0] # 只抓第一筆最相關的就好
+                prod = data['prods'][0] 
                 return {
                     "price": prod.get('price'),
                     "title": prod.get('name'),
@@ -63,5 +65,5 @@ def get_new_price_pchome(keyword):
                     "link": f"https://24h.pchome.com.tw/prod/{prod.get('Id')}"
                 }
     except:
-        return None # 抓不到就算了，回傳 None
+        return None 
     return None
