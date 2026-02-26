@@ -312,4 +312,48 @@ with tab1:
                                     st.error(f"❌ 資料庫連線失敗，請確認是否已給予機器人「編輯者」權限: {e}")
 
 with tab2:
-    st.info("歷史紀錄功能開發中...")
+    st.header("🛒 二手尋寶商城")
+    st.caption("這裡展示了平台上所有經過 AI 鑑價認證的二手好物！")
+    
+    if st.button("🔄 刷新商城商品"):
+        st.rerun()
+
+    try:
+        # 1. 讀取金鑰並連線
+        key_dict = json.loads(st.secrets["google_credentials"])
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        creds = Credentials.from_service_account_info(key_dict, scopes=scopes)
+        client = gspread.authorize(creds)
+        
+        # 2. 開啟資料表並抓取所有資料
+        # 注意：這裡會抓取第一列(Row 1)當作字典的 Key
+        sheet = client.open("SHM_Database").sheet1
+        records = sheet.get_all_records() 
+        
+        # 3. 顯示商品卡片
+        if not records:
+            st.info("目前商城還沒有商品，趕快去上架第一個商品吧！")
+        else:
+            # 用欄位排版，一行顯示 3 個商品
+            cols = st.columns(3)
+            # 反轉列表，讓最新上架的商品排在最前面
+            for i, item in enumerate(reversed(records)):
+                with cols[i % 3]:
+                    st.markdown(f"""
+                    <div style="background-color: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; border: 1px solid #E0E0E0;">
+                        <span style="background-color: #FF4B4B; color: white; padding: 3px 8px; border-radius: 15px; font-size: 12px; font-weight: bold;">{item.get('評分', 'N/A')}</span>
+                        <h4 style="margin-top: 10px; color: #333;">{item.get('商品標題', '未命名商品')}</h4>
+                        <h2 style="color: #28a745; margin: 10px 0;">NT$ {item.get('預售價格', '0')}</h2>
+                        <p style="font-size: 13px; color: #666; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">{item.get('描述', '無商品描述')}</p>
+                        <hr style="margin: 10px 0;">
+                        <p style="font-size: 12px; color: #888; margin: 0;">👤 賣家：{item.get('賣家稱呼', '匿名')}</p>
+                        <p style="font-size: 12px; color: #888; margin: 0;">✉️ 聯絡：{item.get('聯絡方式', '無')}</p>
+                        <p style="font-size: 10px; color: #aaa; margin-top: 5px; text-align: right;">上架時間: {item.get('上架時間', '')}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+    except Exception as e:
+        st.error(f"無法讀取商城資料，請檢查資料庫連線或表頭設定：{e}")
