@@ -303,10 +303,12 @@ with tab1:
                                     sheet.append_row(row_data)
                                     
                                     st.balloons() 
-                                    st.success(f"""
-                                    ✅ **上架成功！** 您的商品「{title}」已安全建檔進入雲端資料庫。
-                                    我們將透過 {contact_info} 與您聯繫後續事宜。
-                                    """)
+                                    st.success(f"✅ **上架成功！** 您的商品「{title}」已安全建檔進入雲端資料庫。畫面將在 3 秒後自動重置以供下一筆鑑價。")
+                                    
+                                    # === 核心修復：清除記憶並重啟網頁 ===
+                                    time.sleep(3) # 讓使用者有時間看到氣球和成功訊息
+                                    st.session_state.analysis_done = False # 把記憶體清空
+                                    st.rerun() # 重新整理網頁，回到乾淨的上傳介面
                                     
                                 except Exception as e:
                                     st.error(f"❌ 資料庫連線失敗，請確認是否已給予機器人「編輯者」權限: {e}")
