@@ -13,42 +13,14 @@ from datetime import datetime
 # 設定網頁標題
 st.set_page_config(page_title="SHM 智能鑑價網", page_icon="💎", layout="wide")
 
-# === 🎨 介面美化：專業電商白風格 ===
+# === 🎨 介面美化 ===
 st.markdown("""
     <style>
-    /* 全站背景設定為乾淨的灰白色，讓卡片更突出 */
-    .stApp {
-        background-color: #F0F2F6;
-    }
-    .metric-box {
-        background-color: #FFFFFF;
-        padding: 20px;
-        border-radius: 12px;
-        border-left: 5px solid #FF4B4B;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-        margin-bottom: 10px;
-    }
-    .used-item {
-        background-color: #FFFFFF;
-        padding: 15px;
-        border-radius: 10px;
-        margin-bottom: 10px;
-        border: 1px solid #E0E0E0;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        color: #333333;
-    }
-    .new-item {
-        background-color: #F9FFF9;
-        padding: 15px;
-        border-radius: 10px;
-        margin-bottom: 10px;
-        border: 1px solid #28a745;
-        color: #333333;
-    }
-    .stButton>button {
-        border-radius: 20px;
-        font-weight: bold;
-    }
+    .stApp { background-color: #F0F2F6; }
+    .metric-box { background-color: #FFFFFF; padding: 20px; border-radius: 12px; border-left: 5px solid #FF4B4B; box-shadow: 0 2px 6px rgba(0,0,0,0.08); margin-bottom: 10px; }
+    .used-item { background-color: #FFFFFF; padding: 15px; border-radius: 10px; margin-bottom: 10px; border: 1px solid #E0E0E0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); color: #333333; }
+    .new-item { background-color: #F9FFF9; padding: 15px; border-radius: 10px; margin-bottom: 10px; border: 1px solid #28a745; color: #333333; }
+    .stButton>button { border-radius: 20px; font-weight: bold; }
     a {text-decoration: none; color: #0066CC !important;}
     a:hover {color: #FF4B4B !important;}
     h1, h2, h3 { color: #111111 !important; }
@@ -75,15 +47,29 @@ with st.sidebar:
     st.caption("2. 底部：確認型號貼紙 (關鍵!)")
 
 # 主功能區
-tab1, tab2 = st.tabs(["📤 上傳鑑價", "📊 歷史紀錄"])
+tab1, tab2 = st.tabs(["📤 上傳鑑價", "🛒 二手尋寶商城"])
 
 with tab1:
     if not os.path.exists("test_data"):
         os.makedirs("test_data")
+
+    # --- 關鍵修正：初始化上傳器 Key ---
+    if "uploader_key" not in st.session_state:
+        st.session_state.uploader_key = 0
     
     col_upload, col_empty = st.columns([2, 1])
     with col_upload:
-        uploaded_files = st.file_uploader("拖曳或點擊上傳商品照片...，可多拍攝幾張以增加商品估價準確性", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+        # --- 關鍵修正：綁定 key 參數 ---
+        uploaded_files = st.file_uploader(
+            "拖曳或點擊上傳商品照片...", 
+            type=["jpg", "png", "jpeg"], 
+            accept_multiple_files=True,
+            key=f"uploader_{st.session_state.uploader_key}"
+        )
+
+    # 初始化分析狀態
+    if "analysis_done" not in st.session_state:
+        st.session_state.analysis_done = False
 
     if uploaded_files:
         st.write("##### 📸 預覽：")
@@ -99,10 +85,6 @@ with tab1:
 
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # --- 🟢 記憶體初始化：用來記住 AI 分析的結果 ---
-        if "analysis_done" not in st.session_state:
-            st.session_state.analysis_done = False
-
         if st.button("🚀 啟動 AI 全面分析", type="primary", use_container_width=True):
             if len(saved_paths) < 2:
                 st.warning("💡 建議至少上傳 2 張照片（含底部標籤）以獲得精準行情！")
@@ -129,7 +111,7 @@ with tab1:
                 used_items = scraper.get_used_market_data(search_query, ai_price_range)
                 new_item = scraper.get_new_price_pchome(search_query)
                 
-                # --- 🟢 把資料存進「記憶體」，這樣按「上架」時資料才不會不見 ---
+                # 存入 Session State
                 st.session_state.data = data
                 st.session_state.search_query = search_query
                 st.session_state.ai_price_range = ai_price_range
@@ -146,18 +128,14 @@ with tab1:
             except Exception as e:
                 st.error(f"分析失敗: {e}")
 
-        # ==========================================
-        # 只要記憶體裡面有資料，就顯示下方內容
-        # ==========================================
+        # 顯示分析結果
         if st.session_state.analysis_done:
-            # 從記憶體把資料拿出來
             data = st.session_state.data
             search_query = st.session_state.search_query
             ai_price_range = st.session_state.ai_price_range
             used_items = st.session_state.used_items
             new_item = st.session_state.new_item
 
-            # === 顯示區塊 1: AI 核心結果 ===
             st.success(f"🎉 辨識成功：{data.get('brand')} {data.get('model')}")
             
             c1, c2, c3 = st.columns(3)
@@ -170,10 +148,7 @@ with tab1:
             
             st.divider()
 
-            # === 顯示區塊 2: 二手市場行情 ===
             st.subheader("📉 二手市場成交參考")
-            st.caption(f"根據 {search_query} 的近期市場數據分析：")
-            
             u_col1, u_col2 = st.columns(2)
             for i, item in enumerate(used_items):
                 if i < 4:
@@ -182,26 +157,13 @@ with tab1:
                         <div class="used-item">
                             <span style="background-color: #E0E0E0; color: #333; padding: 2px 8px; border-radius: 4px; font-size: 11px;">{item['platform']}</span>
                             <span style="float: right; color: #666; font-size: 12px;">{item['tag']}</span>
-                            <br>
-                            <b style="color:#222; font-size: 15px;">{item['title']}</b><br>
+                            <br><b style="color:#222; font-size: 15px;">{item['title']}</b><br>
                             <span style="font-size: 20px; color: #D93025; font-weight: bold;">NT$ {item['price']:,}</span><br>
-                        </div>
-                        """, unsafe_allow_html=True)
+                        </div>""", unsafe_allow_html=True)
             
             st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown("**🔎 前往平台查看即時商品：**")
-            shopee_url = f"https://shopee.tw/search?keyword={search_query}"
-            carousell_url = f"https://tw.carousell.com/search/{search_query}"
             
-            btn_col1, btn_col2 = st.columns(2)
-            with btn_col1:
-                st.link_button("🦐 蝦皮購物 (Shopee)", shopee_url, use_container_width=True)
-            with btn_col2:
-                st.link_button("🎠 旋轉拍賣 (Carousell)", carousell_url, use_container_width=True)
-
-            st.divider()
-
-            # === 顯示區塊 3: 新品價格對照 ===
+            # 新品對照
             if new_item:
                 st.subheader("🆕 新品原價對照 (PChome 24h)")
                 try:
@@ -210,7 +172,6 @@ with tab1:
                     avg_used = sum(prices)/len(prices) if prices else 0
                     new_price = int(new_item['price'])
                     save_money = new_price - avg_used
-                    
                     if save_money > 0:
                         st.info(f"🔥 買二手超划算！相比新品約可省下 **NT$ {int(save_money):,}**")
                 except:
@@ -218,8 +179,8 @@ with tab1:
 
                 col_new_img, col_new_info = st.columns([1, 3])
                 with col_new_img:
-                        if new_item['image']:
-                            st.image(new_item['image'], use_container_width=True)
+                    if new_item['image']:
+                        st.image(new_item['image'], use_container_width=True)
                 with col_new_info:
                     st.markdown(f"""
                     <div class="new-item">
@@ -227,18 +188,16 @@ with tab1:
                         <span style="font-size: 16px; color: #333;">{new_item['title']}</span><br>
                         <span style="font-size: 24px; color: #111; font-weight: bold;">NT$ {new_item['price']:,}</span><br>
                         <a href="{new_item['link']}" target="_blank">🔗 前往 PChome 賣場</a>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    </div>""", unsafe_allow_html=True)
 
             st.divider()
 
-            # === 🚀 核心商業功能：一鍵上架 ===
+            # 一鍵上架表單
             st.markdown("""
             <div style="background-color: #FFF3CD; padding: 20px; border-radius: 10px; border: 1px solid #FFEEBA; margin-bottom: 20px;">
                 <h3 style="color: #856404; margin: 0;">💰 滿意這個價格嗎？</h3>
                 <p style="color: #856404; margin-top: 5px;">我們的 AI 已經幫您準備好拍賣文案，現在上架，最快 24 小時內成交！</p>
-            </div>
-            """, unsafe_allow_html=True)
+            </div>""", unsafe_allow_html=True)
 
             with st.expander("📝 點擊展開「一鍵上架表單」 (AI 自動填寫)", expanded=True):
                 with st.form("sell_form"):
@@ -260,8 +219,7 @@ with tab1:
 新舊程度：{data.get('condition_score')}/10
 專家短評：{data.get('analysis')}
 
-此商品經由 SHM AI 智能鑑價系統認證。
-                    """
+此商品經由 SHM AI 智能鑑價系統認證。"""
                     desc = st.text_area("商品描述", value=default_desc.strip(), height=150)
                     
                     col_contact1, col_contact2 = st.columns(2)
@@ -272,7 +230,6 @@ with tab1:
                     
                     submitted = st.form_submit_button("🚀 確認上架")
                     
-                    # 點擊上架按鈕後執行的動作
                     if submitted:
                         if not contact_info:
                             st.error("請填寫聯絡方式，以便買家聯繫您！")
@@ -280,38 +237,26 @@ with tab1:
                             with st.spinner("🔄 正在安全寫入系統資料庫..."):
                                 try:
                                     key_dict = json.loads(st.secrets["google_credentials"])
-                                    scopes = [
-                                        "https://www.googleapis.com/auth/spreadsheets",
-                                        "https://www.googleapis.com/auth/drive"
-                                    ]
+                                    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
                                     creds = Credentials.from_service_account_info(key_dict, scopes=scopes)
                                     client = gspread.authorize(creds)
-                                    
                                     sheet = client.open("SHM_Database").sheet1
                                     
                                     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                    row_data = [
-                                        current_time,
-                                        title,
-                                        str(price),
-                                        f"{data.get('condition_score')}/10",
-                                        seller_name,
-                                        contact_info,
-                                        desc
-                                    ]
-                                    
+                                    row_data = [current_time, title, str(price), f"{data.get('condition_score')}/10", seller_name, contact_info, desc]
                                     sheet.append_row(row_data)
                                     
                                     st.balloons() 
-                                    st.success(f"✅ **上架成功！** 您的商品「{title}」已安全建檔進入雲端資料庫。畫面將在 3 秒後自動重置以供下一筆鑑價。")
+                                    st.success(f"✅ **上架成功！** 您的商品「{title}」已安全建檔進入雲端資料庫。畫面將在 3 秒後自動重置。")
                                     
-                                    # === 核心修復：清除記憶並重啟網頁 ===
-                                    time.sleep(3) # 讓使用者有時間看到氣球和成功訊息
-                                    st.session_state.analysis_done = False # 把記憶體清空
-                                    st.rerun() # 重新整理網頁，回到乾淨的上傳介面
+                                    # === 核心修復：清除狀態並重置上傳器 ===
+                                    time.sleep(3)
+                                    st.session_state.analysis_done = False
+                                    st.session_state.uploader_key += 1 # 強制換 Key，銷毀舊上傳器
+                                    st.rerun()
                                     
                                 except Exception as e:
-                                    st.error(f"❌ 資料庫連線失敗，請確認是否已給予機器人「編輯者」權限: {e}")
+                                    st.error(f"❌ 資料庫連線失敗: {e}")
 
 with tab2:
     st.header("🛒 二手尋寶商城")
@@ -321,27 +266,17 @@ with tab2:
         st.rerun()
 
     try:
-        # 1. 讀取金鑰並連線
         key_dict = json.loads(st.secrets["google_credentials"])
-        scopes = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_info(key_dict, scopes=scopes)
         client = gspread.authorize(creds)
-        
-        # 2. 開啟資料表並抓取所有資料
-        # 注意：這裡會抓取第一列(Row 1)當作字典的 Key
         sheet = client.open("SHM_Database").sheet1
         records = sheet.get_all_records() 
         
-        # 3. 顯示商品卡片
         if not records:
             st.info("目前商城還沒有商品，趕快去上架第一個商品吧！")
         else:
-            # 用欄位排版，一行顯示 3 個商品
             cols = st.columns(3)
-            # 反轉列表，讓最新上架的商品排在最前面
             for i, item in enumerate(reversed(records)):
                 with cols[i % 3]:
                     st.markdown(f"""
@@ -356,6 +291,5 @@ with tab2:
                         <p style="font-size: 10px; color: #aaa; margin-top: 5px; text-align: right;">上架時間: {item.get('上架時間', '')}</p>
                     </div>
                     """, unsafe_allow_html=True)
-                    
     except Exception as e:
         st.error(f"無法讀取商城資料，請檢查資料庫連線或表頭設定：{e}")
