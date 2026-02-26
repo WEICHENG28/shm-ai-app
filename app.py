@@ -93,14 +93,23 @@ with tab1:
             status_text = st.empty()
             
             try:
-                # 1. AI 視覺分析
-                status_text.text("🔍 AI 正在掃描特徵與標籤...")
+                # 1. AI 視覺分析與嚴格審查
+                status_text.text("🔍 AI 正在進行影像品質與特徵審查...")
                 progress_bar.progress(30)
                 raw_result = ai_engine.analyze_multiple_items(saved_paths)
                 json_str = raw_result.replace("```json", "").replace("```", "").strip()
                 data = json.loads(json_str)
                 
-                # 2. 獲取市場數據
+                # === 🛑 核心防禦機制：攔截不合格照片 ===
+                if not data.get('is_qualified', True):
+                    progress_bar.empty()
+                    status_text.empty()
+                    st.error(f"❌ **AI 影像審查未通過：** {data.get('rejection_reason')}")
+                    st.warning("💡 為了確保平台鑑價公信力，請根據上述提示重新拍攝，並再次上傳照片。")
+                    st.stop() # 立刻終止程式，不往下查價、也不讓賣家上架！
+                # ==========================================
+
+                # 2. 獲取市場數據 (審查通過才會執行到這裡)
                 status_text.text("📊 正在分析二手市場行情 & 比對新品價格...")
                 progress_bar.progress(60)
                 raw_model = data.get('model', '')
