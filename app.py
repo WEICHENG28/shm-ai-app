@@ -224,10 +224,12 @@ with tab1:
                         avg_price = 500
                     price = st.number_input("預售價格 (TWD)", value=avg_price, step=50)
                     
+                    # === 🏷️ 核心修改：將 AI 生成的標籤加入商品描述中 ===
                     default_desc = f"""
 商品型號：{data.get('model')}
 新舊程度：{data.get('condition_score')}/10
 專家短評：{data.get('analysis')}
+分類標籤：{data.get('tags', '#無標籤')}
 
 此商品經由 SHM AI 智能鑑價系統認證。"""
                     desc = st.text_area("商品描述", value=default_desc.strip(), height=150)
