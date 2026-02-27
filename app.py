@@ -12,7 +12,7 @@ from datetime import datetime
 import requests
 import base64
 import urllib.parse
-import pandas as pd # 🆕 新增：用於數據分析與畫圖表
+import pandas as pd
 
 # 設定網頁標題
 st.set_page_config(page_title="SHM 智能鑑價網", page_icon="💎", layout="wide")
@@ -59,8 +59,8 @@ with st.sidebar:
     st.markdown("---")
     st.info("🛡️ 本平台由 AI 嚴格審查圖片品質，不合格之照片將無法進入鑑價與上架流程，敬請配合。")
 
-# === 🆕 核心修改：加入「營運後台」分頁 ===
-tab_home, tab1, tab2, tab_admin = st.tabs(["🏠 平台首頁", "📤 上傳鑑價", "🛒 二手尋寶商城", "📈 營運後台"])
+# === 🆕 核心修改：將營運後台改為「賣家中心」 ===
+tab_home, tab1, tab2, tab_seller = st.tabs(["🏠 平台首頁", "📤 上傳鑑價", "🛒 二手尋寶商城", "📦 賣家中心"])
 
 # ==========================================
 # 🏠 平台首頁 (Landing Page)
@@ -499,20 +499,16 @@ f"""<div style="{card_style}">
         st.error(f"無法讀取商城資料，請檢查資料庫連線或表頭設定：{e}")
 
 # ==========================================
-# 📈 營運後台區塊 (Tab Admin)
+# 📦 賣家專屬中心區塊 (Tab Seller)
 # ==========================================
-with tab_admin:
-    st.header("📈 平台營運後台")
-    st.caption("此區塊僅供平台管理員查看營運數據。")
+with tab_seller:
+    st.header("📦 賣家專屬中心")
+    st.caption("請輸入您的聯絡方式，查看並管理您專屬的商品營運數據。")
     
-    # 簡單的密碼鎖
-    admin_pwd = st.text_input("請輸入管理員密碼解鎖：", type="password")
+    # 偽登入：使用聯絡方式當作身分驗證
+    seller_id = st.text_input("🔑 請輸入您上架時使用的聯絡方式 (Email/電話/Line ID)：")
     
-    # 預設密碼設為：shm_admin (你可以自己改)
-    if admin_pwd == "shm_wei":
-        st.success("解鎖成功！歡迎回來，老闆。")
-        st.divider()
-        
+    if seller_id:
         try:
             # 讀取資料庫
             key_dict = json.loads(st.secrets["google_credentials"])
@@ -523,51 +519,63 @@ with tab_admin:
             records = sheet.get_all_records()
             
             if not records:
-                st.info("目前還沒有任何營運數據。")
+                st.info("目前平台還沒有任何商品喔。")
             else:
-                # 使用 pandas 將資料轉換成容易處理的格式
                 df = pd.DataFrame(records)
                 
-                # 計算核心營運指標
-                total_items = len(df)
-                sold_items = len(df[df['商品狀態'] == '已售出'])
-                active_items = total_items - sold_items
+                # === 🌟 隱藏的老闆後門 (上帝視角) ===
+                if seller_id == "shm_wei":
+                    st.success("🔐 解鎖成功！歡迎回來，老闆 (全站數據模式)。")
+                    my_df = df # 老闆看全部
+                else:
+                    # 一般賣家模式：只過濾出聯絡方式相符的商品
+                    my_df = df[df['聯絡方式'] == seller_id]
                 
-                # 計算總價值 (需要把字串 NT$ 1,000 變成純數字)
-                total_value = 0
-                for price_str in df['預售價格']:
-                    try:
-                        clean_price = int(str(price_str).replace(',', ''))
-                        total_value += clean_price
-                    except:
-                        pass
-                
-                # 顯示頂部大數字指標
-                st.subheader("💡 核心營運指標 (KPI)")
-                col1, col2, col3, col4 = st.columns(4)
-                col1.metric("平台總商品數", f"{total_items} 件")
-                col2.metric("架上流通商品", f"{active_items} 件")
-                col3.metric("已售出商品", f"{sold_items} 件")
-                col4.metric("累計商品總價值 (GMV)", f"NT$ {total_value:,}")
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                
-                # 畫圖表
-                st.subheader("📊 數據視覺化分析")
-                chart_col1, chart_col2 = st.columns(2)
-                
-                with chart_col1:
-                    st.write("**商品狀態分佈**")
-                    status_counts = df['商品狀態'].value_counts()
-                    st.bar_chart(status_counts, color="#FF4B4B")
+                if my_df.empty:
+                    st.warning("找不到您的商品紀錄，可能是聯絡方式輸入錯誤，或是您還沒上架過商品喔！趕快去上架吧！")
+                else:
+                    if seller_id != "shm_admin":
+                        st.success(f"歡迎回來！這是您專屬的賣家數據分析。")
                     
-                with chart_col2:
-                    st.write("**最新上架紀錄 (前 5 筆)**")
-                    recent_df = df[['上架時間', '商品標題', '預售價格', '商品狀態']].tail(5).iloc[::-1]
-                    st.dataframe(recent_df, use_container_width=True, hide_index=True)
+                    st.divider()
                     
+                    # 計算該賣家的核心指標
+                    total_items = len(my_df)
+                    sold_items = len(my_df[my_df['商品狀態'] == '已售出'])
+                    active_items = total_items - sold_items
+                    
+                    total_value = 0
+                    for price_str in my_df['預售價格']:
+                        try:
+                            clean_price = int(str(price_str).replace(',', ''))
+                            total_value += clean_price
+                        except:
+                            pass
+                    
+                    # 顯示專屬數字指標
+                    st.subheader("💡 您的銷售指標")
+                    col1, col2, col3, col4 = st.columns(4)
+                    col1.metric("您的總上架數", f"{total_items} 件")
+                    col2.metric("架上流通商品", f"{active_items} 件")
+                    col3.metric("已成功售出", f"{sold_items} 件")
+                    col4.metric("您的商品總價值", f"NT$ {total_value:,}")
+                    
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    
+                    # 畫圖表與明細
+                    st.subheader("📊 您的商品明細")
+                    chart_col1, chart_col2 = st.columns([1, 2])
+                    
+                    with chart_col1:
+                        st.write("**商品狀態分佈**")
+                        status_counts = my_df['商品狀態'].value_counts()
+                        st.bar_chart(status_counts, color="#FF4B4B")
+                        
+                    with chart_col2:
+                        st.write("**您的上架清單 (最新排序)**")
+                        # 整理顯示給賣家看的乾淨表格
+                        recent_df = my_df[['上架時間', '商品標題', '預售價格', '商品狀態']].iloc[::-1]
+                        st.dataframe(recent_df, use_container_width=True, hide_index=True)
+                        
         except Exception as e:
-            st.error(f"無法讀取後台資料：{e}")
-            
-    elif admin_pwd:
-        st.error("密碼錯誤，請重新輸入！")
+            st.error(f"無法讀取資料：{e}")
