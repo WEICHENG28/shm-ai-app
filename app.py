@@ -120,7 +120,7 @@ with tab1:
                 used_items = scraper.get_used_market_data(search_query, ai_price_range)
                 new_item = scraper.get_new_price_pchome(search_query)
                 
-                # 存入 Session State (並記住第一張照片準備上傳)
+                # 存入 Session State
                 st.session_state.data = data
                 st.session_state.search_query = search_query
                 st.session_state.ai_price_range = ai_price_range
@@ -224,7 +224,6 @@ with tab1:
                         avg_price = 500
                     price = st.number_input("預售價格 (TWD)", value=avg_price, step=50)
                     
-                    # === 🏷️ 核心修改：將 AI 生成的標籤加入商品描述中 ===
                     default_desc = f"""
 商品型號：{data.get('model')}
 新舊程度：{data.get('condition_score')}/10
@@ -269,7 +268,6 @@ with tab1:
                                     sheet = client.open("SHM_Database").sheet1
                                     
                                     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                    # 注意：加入 img_url 到最後一欄
                                     row_data = [current_time, title, str(price), f"{data.get('condition_score')}/10", seller_name, contact_info, desc, img_url]
                                     sheet.append_row(row_data)
                                     
@@ -302,7 +300,7 @@ with tab2:
         if not records:
             st.info("目前商城還沒有商品，趕快去上架第一個商品吧！")
         else:
-            # === 🔍 新增：搜尋與篩選區塊 ===
+            # === 🔍 搜尋與篩選區塊 ===
             st.markdown("### 🔍 篩選商品")
             with st.container():
                 col_search, col_price, col_score = st.columns(3)
@@ -318,13 +316,11 @@ with tab2:
             # === ⚙️ 執行篩選邏輯 ===
             filtered_records = []
             for item in reversed(records):
-                # 1. 關鍵字過濾
                 title = str(item.get('商品標題', '')).lower()
                 desc = str(item.get('描述', '')).lower()
                 if search_term and search_term.lower() not in title and search_term.lower() not in desc:
                     continue
                 
-                # 2. 價格過濾
                 try:
                     price = int(str(item.get('預售價格', '0')).replace(',', ''))
                 except:
@@ -332,7 +328,6 @@ with tab2:
                 if price > max_price:
                     continue
                 
-                # 3. 評分過濾
                 try:
                     score_str = str(item.get('評分', '0/10')).split('/')[0]
                     score = float(score_str)
@@ -341,7 +336,6 @@ with tab2:
                 if score < min_score:
                     continue
                 
-                # 若通過所有考驗，則加入顯示清單
                 filtered_records.append(item)
 
             # === 🖼️ 顯示過濾後的商品 ===
@@ -357,9 +351,9 @@ with tab2:
                         else:
                             img_html = '<div style="width: 100%; height: 200px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; color: #aaa;">無圖片</div>'
                         
-                        # 標題加入單行截斷 (避免標題太長破壞版面)
+                        # 標題加入單行截斷
                         st.markdown(f"""
-                        <div style="background-color: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; border: 1px solid #E0E0E0;">
+                        <div style="background-color: white; padding: 15px; border-radius: 10px 10px 0 0; border: 1px solid #E0E0E0; border-bottom: none;">
                             {img_html}
                             <span style="background-color: #FF4B4B; color: white; padding: 3px 8px; border-radius: 15px; font-size: 12px; font-weight: bold;">{item.get('評分', 'N/A')}</span>
                             <h4 style="margin-top: 10px; color: #333; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{item.get('商品標題', '未命名商品')}">{item.get('商品標題', '未命名商品')}</h4>
@@ -367,8 +361,25 @@ with tab2:
                             <p style="font-size: 13px; color: #666; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">{item.get('描述', '無商品描述')}</p>
                             <hr style="margin: 10px 0;">
                             <p style="font-size: 12px; color: #888; margin: 0;">👤 賣家：{item.get('賣家稱呼', '匿名')}</p>
-                            <p style="font-size: 12px; color: #888; margin: 0;">✉️ 聯絡：{item.get('聯絡方式', '無')}</p>
                         </div>
                         """, unsafe_allow_html=True)
+                        
+                        # === 🆕 一鍵聯絡賣家按鈕 (接在商品卡片正下方) ===
+                        contact_info = item.get('聯絡方式', '')
+                        item_title = item.get('商品標題', '未命名商品')
+                        item_price = item.get('預售價格', '0')
+                        
+                        st.markdown('<div style="background-color: white; padding: 0 15px 15px 15px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; border: 1px solid #E0E0E0; border-top: none;">', unsafe_allow_html=True)
+                        if "@" in contact_info:
+                            mail_subject = f"【SHM 智能鑑價網】我想購買您的「{item_title}」"
+                            mail_body = f"您好！%0D%0A%0D%0A我在 SHM AI 認證平台上看到您上架的商品：「{item_title}」，售價為 NT$ {item_price}。%0D%0A請問商品還在嗎？希望能與您進一步討論交易細節，謝謝！"
+                            mail_link = f"mailto:{contact_info}?subject={mail_subject}&body={mail_body}"
+                            st.link_button("✉️ 一鍵發信聯絡賣家", mail_link, use_container_width=True)
+                        elif contact_info:
+                            st.info(f"📱 賣家聯絡方式：{contact_info}")
+                        else:
+                            st.button("賣家未提供聯絡方式", disabled=True, use_container_width=True, key=f"no_contact_btn_{i}")
+                        st.markdown('</div>', unsafe_allow_html=True)
+
     except Exception as e:
         st.error(f"無法讀取商城資料，請檢查資料庫連線或表頭設定：{e}")
