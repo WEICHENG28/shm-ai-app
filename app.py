@@ -216,17 +216,36 @@ with tab1:
                     default_title = f"【AI認證】{data.get('brand')} {data.get('model')} - {data.get('condition_score')}成新"
                     title = st.text_input("商品標題", value=default_title)
                     
-                    # === 💰 明確提示賣家可以自訂價格 ===
-                    st.info(f"💡 AI 預估合理區間為：**{ai_price_range}**。您可以參考此數據，在下方自由決定最終售價。")
+                    # === 🔒 核心升級：強制限制定價範圍 ===
                     try:
                         clean_str = ai_price_range.replace(',', '')
                         prices = [int(n) for n in re.findall(r'\d+', clean_str)]
+                        if len(prices) >= 2:
+                            min_price = min(prices)
+                            max_price = max(prices)
+                        elif len(prices) == 1:
+                            min_price = prices[0]
+                            max_price = prices[0] * 2
+                        else:
+                            min_price, max_price = 0, 100000
+                            
                         avg_price = int(sum(prices)/len(prices)) if prices else 500
+                        # 防呆：確保預設值不會超出範圍
+                        if avg_price < min_price: avg_price = min_price
+                        if avg_price > max_price: avg_price = max_price
                     except:
-                        avg_price = 500
+                        min_price, max_price, avg_price = 0, 100000, 500
                     
-                    # 讓這個輸入框更顯眼，明確告知這是可以改的
-                    price = st.number_input("💰 您的最終上架價格 (TWD)", value=avg_price, step=50)
+                    st.info(f"🛡️ **為確保平台公信力，您的定價必須符合 AI 鑑價區間：NT$ {min_price} - {max_price}**")
+                    
+                    # 加入 min_value 和 max_value 鎖定輸入框
+                    price = st.number_input(
+                        "💰 您的最終上架價格 (TWD)", 
+                        min_value=min_price, 
+                        max_value=max_price, 
+                        value=avg_price, 
+                        step=50
+                    )
                     
                     default_desc = f"""
 商品型號：{data.get('model')}
@@ -241,7 +260,7 @@ with tab1:
                     with col_contact1:
                         seller_name = st.text_input("您的稱呼")
                     with col_contact2:
-                        contact_info = st.text_input("聯絡方式 (Line/Email)")
+                        contact_info = st.text_input("聯絡方式 (建議填寫 Email 啟用一鍵發信，或填 Line ID/電話)")
                     
                     submitted = st.form_submit_button("🚀 確認上架")
                     
@@ -251,7 +270,6 @@ with tab1:
                         else:
                             with st.spinner("🔄 正在上傳圖片與寫入資料庫..."):
                                 try:
-                                    # --- 📸 1. 上傳圖片到 ImgBB 圖床 ---
                                     img_url = ""
                                     if "main_image_path" in st.session_state and os.path.exists(st.session_state.main_image_path):
                                         with open(st.session_state.main_image_path, "rb") as f:
@@ -264,7 +282,6 @@ with tab1:
                                         if res.status_code == 200:
                                             img_url = res.json()['data']['url']
                                     
-                                    # --- 🗄️ 2. 寫入 Google Sheets ---
                                     key_dict = json.loads(st.secrets["google_credentials"])
                                     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
                                     creds = Credentials.from_service_account_info(key_dict, scopes=scopes)
@@ -304,7 +321,6 @@ with tab2:
         if not records:
             st.info("目前商城還沒有商品，趕快去上架第一個商品吧！")
         else:
-            # === 🔍 搜尋與篩選區塊 ===
             st.markdown("### 🔍 篩選商品")
             with st.container():
                 col_search, col_price, col_score = st.columns(3)
@@ -317,7 +333,6 @@ with tab2:
             
             st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
 
-            # === ⚙️ 執行篩選邏輯 ===
             filtered_records = []
             for item in reversed(records):
                 title = str(item.get('商品標題', '')).lower()
@@ -342,7 +357,6 @@ with tab2:
                 
                 filtered_records.append(item)
 
-            # === 🖼️ 顯示過濾後的商品 ===
             if not filtered_records:
                 st.warning("找不到符合條件的商品，請調整上面的篩選條件喔！")
             else:
@@ -355,22 +369,22 @@ with tab2:
                         else:
                             img_html = '<div style="width: 100%; height: 200px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; color: #aaa;">無圖片</div>'
                         
-                        # === 🆕 重構的 HTML 卡片：保證一體成型不跑版 ===
+                        # === 🆕 完美融合卡片：按鈕不跑版設計 ===
                         contact_info = str(item.get('聯絡方式', ''))
                         item_title = str(item.get('商品標題', '未命名商品'))
                         item_price = str(item.get('預售價格', '0'))
                         
-                        # 根據聯絡方式類型，產生不同的聯絡按鈕 HTML
+                        # 判斷聯絡方式並生成純 HTML 按鈕
                         contact_html = ""
                         if "@" in contact_info:
                             mail_subject = f"【SHM 智能鑑價網】我想購買您的「{item_title}」"
                             mail_body = f"您好！%0D%0A%0D%0A我在 SHM AI 認證平台上看到您上架的商品：「{item_title}」，售價為 NT$ {item_price}。%0D%0A請問商品還在嗎？希望能與您進一步討論交易細節，謝謝！"
                             mail_link = f"mailto:{contact_info}?subject={mail_subject}&body={mail_body}"
-                            contact_html = f'<a href="{mail_link}" target="_blank" style="display: block; width: 100%; text-align: center; background-color: #FF4B4B; color: white; padding: 10px 0; border-radius: 8px; font-weight: bold; text-decoration: none; margin-top: 15px; transition: background-color 0.3s;">✉️ 一鍵發信聯絡賣家</a>'
+                            contact_html = f'<a href="{mail_link}" target="_blank" style="display: block; width: 100%; text-align: center; background-color: #FF4B4B; color: white; padding: 10px 0; border-radius: 8px; font-weight: bold; text-decoration: none; margin-top: 15px;">✉️ 發送 Email 聯絡賣家</a>'
                         elif contact_info:
-                            contact_html = f'<div style="background-color: #E8F0FE; padding: 10px; border-radius: 8px; margin-top: 15px; text-align: center; color: #1967D2; font-weight: bold; font-size: 14px;">📱 聯絡方式：{contact_info}</div>'
+                            contact_html = f'<div style="width: 100%; text-align: center; background-color: #E8F0FE; color: #1967D2; padding: 10px 0; border-radius: 8px; font-weight: bold; margin-top: 15px; border: 1px solid #D2E3FC;">📱 Line/電話：{contact_info}</div>'
                         else:
-                            contact_html = f'<div style="background-color: #F8F9FA; padding: 10px; border-radius: 8px; margin-top: 15px; text-align: center; color: #aaa; font-size: 14px;">無聯絡方式</div>'
+                            contact_html = f'<div style="width: 100%; text-align: center; background-color: #F8F9FA; color: #aaa; padding: 10px 0; border-radius: 8px; font-weight: bold; margin-top: 15px; border: 1px solid #E0E0E0;">🚫 未提供聯絡方式</div>'
 
                         # 將所有元素包裝在同一個 DIV 中
                         st.markdown(f"""
