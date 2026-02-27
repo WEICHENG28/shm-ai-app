@@ -27,6 +27,12 @@ st.markdown("""
     a {text-decoration: none; color: #0066CC !important;}
     a:hover {color: #FF4B4B !important;}
     h1, h2, h3 { color: #111111 !important; }
+    
+    /* 首頁專屬美化 */
+    .hero-section { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); padding: 40px; border-radius: 15px; color: white; text-align: center; margin-bottom: 30px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    .hero-title { font-size: 2.5rem !important; font-weight: 800; color: white !important; margin-bottom: 15px;}
+    .hero-subtitle { font-size: 1.2rem; color: #e0e0e0; margin-bottom: 20px; }
+    .step-card { background-color: white; padding: 25px 20px; border-radius: 12px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); height: 100%; border-top: 4px solid #FF4B4B;}
     </style>
     """, unsafe_allow_html=True)
 
@@ -36,7 +42,7 @@ with col_logo:
     st.markdown("<h1 style='text-align: center;'>💎</h1>", unsafe_allow_html=True)
 with col_title:
     st.title("SHM 二手AI智能鑑價中心")
-    st.markdown("##### 🚀 AI 視覺鑑價 / 市場大數據分析")
+    st.markdown("##### 🚀 全台首創 · AI 視覺鑑價與無摩擦交易平台")
 
 st.divider()
 
@@ -45,13 +51,71 @@ with st.sidebar:
     st.header("⚙️ 系統選單")
     st.success("🟢 系統狀態：連線正常")
     st.markdown("---")
-    st.write("📸 **拍攝指南**")
-    st.caption("1. 正面：確認款式")
-    st.caption("2. 底部：確認型號貼紙 (關鍵!)")
+    st.write("📸 **AI 拍攝指南**")
+    st.caption("1. 確保光源充足，避免嚴重反光。")
+    st.caption("2. 正面：確認商品款式與主體。")
+    st.caption("3. 底部/標籤：確認確切型號 (極度關鍵!)")
+    st.markdown("---")
+    st.info("🛡️ 本平台由 AI 嚴格審查圖片品質，不合格之照片將無法進入鑑價與上架流程，敬請配合。")
 
-# 主功能區
-tab1, tab2 = st.tabs(["📤 上傳鑑價", "🛒 二手尋寶商城"])
+# === 🆕 核心修改：加入「首頁」分頁 ===
+tab_home, tab1, tab2 = st.tabs(["🏠 平台首頁", "📤 上傳鑑價", "🛒 二手尋寶商城"])
 
+# ==========================================
+# 🏠 平台首頁 (Landing Page)
+# ==========================================
+with tab_home:
+    st.markdown("""
+    <div class="hero-section">
+        <div class="hero-title">讓閒置好物，遇見對的人</div>
+        <div class="hero-subtitle">全台第一套整合「AI 影像品管、精準大數據估價、一鍵自動上架」的智能平台</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("### 💡 簡單 4 步驟，立刻將好物變現")
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    col_step1, col_step2, col_step3, col_step4 = st.columns(4)
+    with col_step1:
+        st.markdown("""
+        <div class="step-card">
+            <h1 style="margin:0; color:#FF4B4B;">📸 1</h1>
+            <h4 style="margin-top:10px;">拍照上傳</h4>
+            <p style="font-size: 13px; color: #666;">拍下商品正面與型號標籤，由 AI 進行嚴格影像品管，杜絕假圖與模糊照。</p>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_step2:
+        st.markdown("""
+        <div class="step-card">
+            <h1 style="margin:0; color:#FF4B4B;">🧠 2</h1>
+            <h4 style="margin-top:10px;">AI 精準鑑價</h4>
+            <p style="font-size: 13px; color: #666;">結合視覺特徵與網路市場大數據，10 秒內給出最合理的二手成交價格區間。</p>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_step3:
+        st.markdown("""
+        <div class="step-card">
+            <h1 style="margin:0; color:#FF4B4B;">🛒 3</h1>
+            <h4 style="margin-top:10px;">一鍵自動上架</h4>
+            <p style="font-size: 13px; color: #666;">AI 自動生成專業文案與智慧搜尋標籤，圖片自動上傳圖床，無縫進入商城。</p>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_step4:
+        st.markdown("""
+        <div class="step-card">
+            <h1 style="margin:0; color:#FF4B4B;">🤝 4</h1>
+            <h4 style="margin-top:10px;">買賣無縫對接</h4>
+            <p style="font-size: 13px; color: #666;">買家透過商城專屬「一鍵發信按鈕」直達賣家信箱，去除所有溝通摩擦力。</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.info("👈 **準備好體驗了嗎？請點擊上方的「📤 上傳鑑價」分頁開始測試，或是進入「🛒 二手尋寶商城」尋找好物！**")
+
+
+# ==========================================
+# 📤 上傳鑑價區塊 (Tab 1)
+# ==========================================
 with tab1:
     if not os.path.exists("test_data"):
         os.makedirs("test_data")
@@ -106,7 +170,6 @@ with tab1:
                     st.warning("💡 為了確保平台鑑價公信力，請根據上述提示重新拍攝，並再次上傳照片。")
                     st.stop()
                 
-                # 清理標籤格式 (把 ['#A', '#B'] 變成純文字 #A #B)
                 raw_tags = data.get('tags', '')
                 if isinstance(raw_tags, list):
                     data['tags'] = " ".join(raw_tags)
@@ -299,6 +362,9 @@ with tab1:
                                 except Exception as e:
                                     st.error(f"❌ 上架失敗，請檢查設定: {e}")
 
+# ==========================================
+# 🛒 二手商城區塊 (Tab 2)
+# ==========================================
 with tab2:
     st.header("🛒 二手尋寶商城")
     st.caption("這裡展示了平台上所有經過 AI 鑑價認證的二手好物！")
@@ -396,7 +462,6 @@ with tab2:
                             else:
                                 contact_html = f'<div style="width: 100%; text-align: center; background-color: #F8F9FA; color: #aaa; padding: 10px 0; border-radius: 8px; font-weight: bold; margin-top: 15px; border: 1px solid #E0E0E0;">🚫 未提供聯絡方式</div>'
 
-                        # 🚨 關鍵修復：HTML 絕對靠左對齊，防止 Markdown 縮排錯誤
                         st.markdown(
 f"""<div style="{card_style}">
 {stamp_html}
