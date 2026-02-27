@@ -216,13 +216,17 @@ with tab1:
                     default_title = f"【AI認證】{data.get('brand')} {data.get('model')} - {data.get('condition_score')}成新"
                     title = st.text_input("商品標題", value=default_title)
                     
+                    # === 💰 明確提示賣家可以自訂價格 ===
+                    st.info(f"💡 AI 預估合理區間為：**{ai_price_range}**。您可以參考此數據，在下方自由決定最終售價。")
                     try:
                         clean_str = ai_price_range.replace(',', '')
                         prices = [int(n) for n in re.findall(r'\d+', clean_str)]
                         avg_price = int(sum(prices)/len(prices)) if prices else 500
                     except:
                         avg_price = 500
-                    price = st.number_input("預售價格 (TWD)", value=avg_price, step=50)
+                    
+                    # 讓這個輸入框更顯眼，明確告知這是可以改的
+                    price = st.number_input("💰 您的最終上架價格 (TWD)", value=avg_price, step=50)
                     
                     default_desc = f"""
 商品型號：{data.get('model')}
@@ -351,35 +355,36 @@ with tab2:
                         else:
                             img_html = '<div style="width: 100%; height: 200px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; color: #aaa;">無圖片</div>'
                         
-                        # 標題加入單行截斷
-                        st.markdown(f"""
-                        <div style="background-color: white; padding: 15px; border-radius: 10px 10px 0 0; border: 1px solid #E0E0E0; border-bottom: none;">
-                            {img_html}
-                            <span style="background-color: #FF4B4B; color: white; padding: 3px 8px; border-radius: 15px; font-size: 12px; font-weight: bold;">{item.get('評分', 'N/A')}</span>
-                            <h4 style="margin-top: 10px; color: #333; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{item.get('商品標題', '未命名商品')}">{item.get('商品標題', '未命名商品')}</h4>
-                            <h2 style="color: #28a745; margin: 10px 0;">NT$ {item.get('預售價格', '0')}</h2>
-                            <p style="font-size: 13px; color: #666; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">{item.get('描述', '無商品描述')}</p>
-                            <hr style="margin: 10px 0;">
-                            <p style="font-size: 12px; color: #888; margin: 0;">👤 賣家：{item.get('賣家稱呼', '匿名')}</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # === 🆕 修復：加入 str() 強制轉型，避免數字被當成 int 而報錯 ===
+                        # === 🆕 重構的 HTML 卡片：保證一體成型不跑版 ===
                         contact_info = str(item.get('聯絡方式', ''))
                         item_title = str(item.get('商品標題', '未命名商品'))
                         item_price = str(item.get('預售價格', '0'))
                         
-                        st.markdown('<div style="background-color: white; padding: 0 15px 15px 15px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; border: 1px solid #E0E0E0; border-top: none;">', unsafe_allow_html=True)
+                        # 根據聯絡方式類型，產生不同的聯絡按鈕 HTML
+                        contact_html = ""
                         if "@" in contact_info:
                             mail_subject = f"【SHM 智能鑑價網】我想購買您的「{item_title}」"
                             mail_body = f"您好！%0D%0A%0D%0A我在 SHM AI 認證平台上看到您上架的商品：「{item_title}」，售價為 NT$ {item_price}。%0D%0A請問商品還在嗎？希望能與您進一步討論交易細節，謝謝！"
                             mail_link = f"mailto:{contact_info}?subject={mail_subject}&body={mail_body}"
-                            st.link_button("✉️ 一鍵發信聯絡賣家", mail_link, use_container_width=True)
+                            contact_html = f'<a href="{mail_link}" target="_blank" style="display: block; width: 100%; text-align: center; background-color: #FF4B4B; color: white; padding: 10px 0; border-radius: 8px; font-weight: bold; text-decoration: none; margin-top: 15px; transition: background-color 0.3s;">✉️ 一鍵發信聯絡賣家</a>'
                         elif contact_info:
-                            st.info(f"📱 賣家聯絡方式：{contact_info}")
+                            contact_html = f'<div style="background-color: #E8F0FE; padding: 10px; border-radius: 8px; margin-top: 15px; text-align: center; color: #1967D2; font-weight: bold; font-size: 14px;">📱 聯絡方式：{contact_info}</div>'
                         else:
-                            st.button("賣家未提供聯絡方式", disabled=True, use_container_width=True, key=f"no_contact_btn_{i}")
-                        st.markdown('</div>', unsafe_allow_html=True)
+                            contact_html = f'<div style="background-color: #F8F9FA; padding: 10px; border-radius: 8px; margin-top: 15px; text-align: center; color: #aaa; font-size: 14px;">無聯絡方式</div>'
+
+                        # 將所有元素包裝在同一個 DIV 中
+                        st.markdown(f"""
+                        <div style="background-color: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; border: 1px solid #E0E0E0;">
+                            {img_html}
+                            <span style="background-color: #FF4B4B; color: white; padding: 3px 8px; border-radius: 15px; font-size: 12px; font-weight: bold;">{item.get('評分', 'N/A')}</span>
+                            <h4 style="margin-top: 10px; color: #333; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{item_title}">{item_title}</h4>
+                            <h2 style="color: #28a745; margin: 10px 0;">NT$ {item_price}</h2>
+                            <p style="font-size: 13px; color: #666; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">{item.get('描述', '無商品描述')}</p>
+                            <hr style="margin: 10px 0;">
+                            <p style="font-size: 12px; color: #888; margin: 0;">👤 賣家：{item.get('賣家稱呼', '匿名')}</p>
+                            {contact_html}
+                        </div>
+                        """, unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"無法讀取商城資料，請檢查資料庫連線或表頭設定：{e}")
