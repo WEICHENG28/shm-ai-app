@@ -12,6 +12,7 @@ from datetime import datetime
 import requests
 import base64
 import urllib.parse
+import pandas as pd # 🆕 新增：用於數據分析與畫圖表
 
 # 設定網頁標題
 st.set_page_config(page_title="SHM 智能鑑價網", page_icon="💎", layout="wide")
@@ -58,8 +59,8 @@ with st.sidebar:
     st.markdown("---")
     st.info("🛡️ 本平台由 AI 嚴格審查圖片品質，不合格之照片將無法進入鑑價與上架流程，敬請配合。")
 
-# === 🆕 核心修改：加入「首頁」分頁 ===
-tab_home, tab1, tab2 = st.tabs(["🏠 平台首頁", "📤 上傳鑑價", "🛒 二手尋寶商城"])
+# === 🆕 核心修改：加入「營運後台」分頁 ===
+tab_home, tab1, tab2, tab_admin = st.tabs(["🏠 平台首頁", "📤 上傳鑑價", "🛒 二手尋寶商城", "📈 營運後台"])
 
 # ==========================================
 # 🏠 平台首頁 (Landing Page)
@@ -496,3 +497,77 @@ f"""<div style="{card_style}">
 
     except Exception as e:
         st.error(f"無法讀取商城資料，請檢查資料庫連線或表頭設定：{e}")
+
+# ==========================================
+# 📈 營運後台區塊 (Tab Admin)
+# ==========================================
+with tab_admin:
+    st.header("📈 平台營運後台")
+    st.caption("此區塊僅供平台管理員查看營運數據。")
+    
+    # 簡單的密碼鎖
+    admin_pwd = st.text_input("請輸入管理員密碼解鎖：", type="password")
+    
+    # 預設密碼設為：shm_admin (你可以自己改)
+    if admin_pwd == "shm_admin":
+        st.success("解鎖成功！歡迎回來，老闆。")
+        st.divider()
+        
+        try:
+            # 讀取資料庫
+            key_dict = json.loads(st.secrets["google_credentials"])
+            scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+            creds = Credentials.from_service_account_info(key_dict, scopes=scopes)
+            client = gspread.authorize(creds)
+            sheet = client.open("SHM_Database").sheet1
+            records = sheet.get_all_records()
+            
+            if not records:
+                st.info("目前還沒有任何營運數據。")
+            else:
+                # 使用 pandas 將資料轉換成容易處理的格式
+                df = pd.DataFrame(records)
+                
+                # 計算核心營運指標
+                total_items = len(df)
+                sold_items = len(df[df['商品狀態'] == '已售出'])
+                active_items = total_items - sold_items
+                
+                # 計算總價值 (需要把字串 NT$ 1,000 變成純數字)
+                total_value = 0
+                for price_str in df['預售價格']:
+                    try:
+                        clean_price = int(str(price_str).replace(',', ''))
+                        total_value += clean_price
+                    except:
+                        pass
+                
+                # 顯示頂部大數字指標
+                st.subheader("💡 核心營運指標 (KPI)")
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("平台總商品數", f"{total_items} 件")
+                col2.metric("架上流通商品", f"{active_items} 件")
+                col3.metric("已售出商品", f"{sold_items} 件")
+                col4.metric("累計商品總價值 (GMV)", f"NT$ {total_value:,}")
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                # 畫圖表
+                st.subheader("📊 數據視覺化分析")
+                chart_col1, chart_col2 = st.columns(2)
+                
+                with chart_col1:
+                    st.write("**商品狀態分佈**")
+                    status_counts = df['商品狀態'].value_counts()
+                    st.bar_chart(status_counts, color="#FF4B4B")
+                    
+                with chart_col2:
+                    st.write("**最新上架紀錄 (前 5 筆)**")
+                    recent_df = df[['上架時間', '商品標題', '預售價格', '商品狀態']].tail(5).iloc[::-1]
+                    st.dataframe(recent_df, use_container_width=True, hide_index=True)
+                    
+        except Exception as e:
+            st.error(f"無法讀取後台資料：{e}")
+            
+    elif admin_pwd:
+        st.error("密碼錯誤，請重新輸入！")
