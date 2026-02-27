@@ -509,7 +509,7 @@ with tab_admin:
     admin_pwd = st.text_input("請輸入管理員密碼解鎖：", type="password")
     
     # 預設密碼設為：shm_admin (你可以自己改)
-    if admin_pwd == "shm_admin":
+    if admin_pwd == "shm_wei":
         st.success("解鎖成功！歡迎回來，老闆。")
         st.divider()
         
