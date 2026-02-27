@@ -11,7 +11,7 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime
 import requests
 import base64
-import urllib.parse # 🆕 新增：用來將中文轉換成網址安全格式
+import urllib.parse
 
 # 設定網頁標題
 st.set_page_config(page_title="SHM 智能鑑價網", page_icon="💎", layout="wide")
@@ -56,7 +56,6 @@ with tab1:
     if not os.path.exists("test_data"):
         os.makedirs("test_data")
 
-    # 初始化上傳器 Key
     if "uploader_key" not in st.session_state:
         st.session_state.uploader_key = 0
     
@@ -69,7 +68,6 @@ with tab1:
             key=f"uploader_{st.session_state.uploader_key}"
         )
 
-    # 初始化分析狀態
     if "analysis_done" not in st.session_state:
         st.session_state.analysis_done = False
 
@@ -95,14 +93,12 @@ with tab1:
             status_text = st.empty()
             
             try:
-                # 1. AI 視覺分析與嚴格審查
                 status_text.text("🔍 AI 正在進行影像品質與特徵審查...")
                 progress_bar.progress(30)
                 raw_result = ai_engine.analyze_multiple_items(saved_paths)
                 json_str = raw_result.replace("```json", "").replace("```", "").strip()
                 data = json.loads(json_str)
                 
-                # === 🛑 核心防禦機制：攔截不合格照片 ===
                 if not data.get('is_qualified', True):
                     progress_bar.empty()
                     status_text.empty()
@@ -110,7 +106,6 @@ with tab1:
                     st.warning("💡 為了確保平台鑑價公信力，請根據上述提示重新拍攝，並再次上傳照片。")
                     st.stop()
                 
-                # 2. 獲取市場數據
                 status_text.text("📊 正在分析二手市場行情 & 比對新品價格...")
                 progress_bar.progress(60)
                 raw_model = data.get('model', '')
@@ -121,7 +116,6 @@ with tab1:
                 used_items = scraper.get_used_market_data(search_query, ai_price_range)
                 new_item = scraper.get_new_price_pchome(search_query)
                 
-                # 存入 Session State
                 st.session_state.data = data
                 st.session_state.search_query = search_query
                 st.session_state.ai_price_range = ai_price_range
@@ -139,7 +133,6 @@ with tab1:
             except Exception as e:
                 st.error(f"分析失敗: {e}")
 
-        # 顯示分析結果
         if st.session_state.analysis_done:
             data = st.session_state.data
             search_query = st.session_state.search_query
@@ -174,7 +167,6 @@ with tab1:
             
             st.markdown("<br>", unsafe_allow_html=True)
             
-            # 新品對照
             if new_item:
                 st.subheader("🆕 新品原價對照 (PChome 24h)")
                 try:
@@ -203,7 +195,6 @@ with tab1:
 
             st.divider()
 
-            # 一鍵上架表單
             st.markdown("""
             <div style="background-color: #FFF3CD; padding: 20px; border-radius: 10px; border: 1px solid #FFEEBA; margin-bottom: 20px;">
                 <h3 style="color: #856404; margin: 0;">💰 滿意這個價格嗎？</h3>
@@ -287,7 +278,8 @@ with tab1:
                                     sheet = client.open("SHM_Database").sheet1
                                     
                                     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                    row_data = [current_time, title, str(price), f"{data.get('condition_score')}/10", seller_name, contact_info, desc, img_url]
+                                    # === 🆕 寫入資料庫時，加入「上架中」狀態 ===
+                                    row_data = [current_time, title, str(price), f"{data.get('condition_score')}/10", seller_name, contact_info, desc, img_url, "上架中"]
                                     sheet.append_row(row_data)
                                     
                                     st.balloons() 
@@ -316,6 +308,10 @@ with tab2:
         sheet = client.open("SHM_Database").sheet1
         records = sheet.get_all_records() 
         
+        # 標記每筆資料在 Google Sheets 裡的真實行數 (用於後續更新狀態)
+        for idx, r in enumerate(records):
+            r['sheet_row'] = idx + 2 # Google Sheet 的第一行是標題，所以資料從第二行開始
+
         if not records:
             st.info("目前商城還沒有商品，趕快去上架第一個商品吧！")
         else:
@@ -329,15 +325,25 @@ with tab2:
                 with col_score:
                     min_score = st.slider("最低新舊評分", min_value=1.0, max_value=10.0, value=1.0, step=0.5)
             
+            # === 🆕 新增：是否顯示已售出商品的開關 ===
+            show_sold = st.checkbox("👁️ 顯示已售出商品 (歷史成交參考)", value=False)
+            
             st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
 
             filtered_records = []
             for item in reversed(records):
+                # 1. 狀態過濾
+                status = str(item.get('商品狀態', '上架中'))
+                if status == '已售出' and not show_sold:
+                    continue # 沒打勾就不顯示已售出的
+                
+                # 2. 關鍵字過濾
                 title = str(item.get('商品標題', '')).lower()
                 desc = str(item.get('描述', '')).lower()
                 if search_term and search_term.lower() not in title and search_term.lower() not in desc:
                     continue
                 
+                # 3. 價格過濾
                 try:
                     price = int(str(item.get('預售價格', '0')).replace(',', ''))
                 except:
@@ -345,6 +351,7 @@ with tab2:
                 if price > max_price:
                     continue
                 
+                # 4. 評分過濾
                 try:
                     score_str = str(item.get('評分', '0/10')).split('/')[0]
                     score = float(score_str)
@@ -362,35 +369,40 @@ with tab2:
                 for i, item in enumerate(filtered_records):
                     with cols[i % 3]:
                         img_src = item.get('圖片網址', '')
-                        if img_src:
-                            img_html = f'<img src="{img_src}" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 10px;">'
-                        else:
-                            img_html = '<div style="width: 100%; height: 200px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; color: #aaa;">無圖片</div>'
-                        
                         contact_info = str(item.get('聯絡方式', ''))
                         item_title = str(item.get('商品標題', '未命名商品'))
                         item_price = str(item.get('預售價格', '0'))
+                        status = str(item.get('商品狀態', '上架中'))
                         
-                        contact_html = ""
-                        if "@" in contact_info:
-                            # === 🆕 核心升級：直接產生 Gmail 網頁版快捷連結 ===
-                            mail_subject = f"【SHM 智能鑑價網】我想購買您的「{item_title}」"
-                            mail_body = f"您好！\n\n我在 SHM AI 認證平台上看到您上架的商品：「{item_title}」，售價為 NT$ {item_price}。\n請問商品還在嗎？希望能與您進一步討論交易細節，謝謝！"
-                            
-                            safe_subject = urllib.parse.quote(mail_subject)
-                            safe_body = urllib.parse.quote(mail_body)
-                            
-                            gmail_link = f"https://mail.google.com/mail/?view=cm&fs=1&to={contact_info}&su={safe_subject}&body={safe_body}"
-                            
-                            # 按鈕改成更明確的提示，並換成 Gmail 經典的紅色
-                            contact_html = f'<a href="{gmail_link}" target="_blank" style="display: block; width: 100%; text-align: center; background-color: #EA4335; color: white; padding: 10px 0; border-radius: 8px; font-weight: bold; text-decoration: none; margin-top: 15px;">✉️ 開啟 Gmail 聯絡賣家</a>'
-                        elif contact_info:
-                            contact_html = f'<div style="width: 100%; text-align: center; background-color: #E8F0FE; color: #1967D2; padding: 10px 0; border-radius: 8px; font-weight: bold; margin-top: 15px; border: 1px solid #D2E3FC;">📱 Line/電話：{contact_info}</div>'
+                        # === 🆕 視覺特效：根據狀態決定卡片的樣子 ===
+                        if status == '已售出':
+                            # 已售出的視覺 (半透明 + 灰階 + 大印章)
+                            card_style = "background-color: #f8f9fa; padding: 15px; border-radius: 12px; border: 1px solid #ddd; margin-bottom: 20px; opacity: 0.6; filter: grayscale(80%); position: relative;"
+                            stamp_html = '<div style="position: absolute; top: 30px; right: 10px; background-color: #555; color: white; padding: 5px 15px; font-weight: bold; transform: rotate(15deg); border-radius: 5px; font-size: 14px; letter-spacing: 2px; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">SOLD</div>'
+                            img_html = f'<img src="{img_src}" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 10px;">' if img_src else '<div style="width: 100%; height: 200px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; color: #aaa;">無圖片</div>'
+                            contact_html = f'<div style="width: 100%; text-align: center; background-color: #ddd; color: #666; padding: 10px 0; border-radius: 8px; font-weight: bold; margin-top: 15px;">🚫 商品已售出</div>'
                         else:
-                            contact_html = f'<div style="width: 100%; text-align: center; background-color: #F8F9FA; color: #aaa; padding: 10px 0; border-radius: 8px; font-weight: bold; margin-top: 15px; border: 1px solid #E0E0E0;">🚫 未提供聯絡方式</div>'
+                            # 正常上架的視覺
+                            card_style = "background-color: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 5px; border: 1px solid #E0E0E0; position: relative;"
+                            stamp_html = ''
+                            img_html = f'<img src="{img_src}" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 10px;">' if img_src else '<div style="width: 100%; height: 200px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; color: #aaa;">無圖片</div>'
+                            
+                            if "@" in contact_info:
+                                mail_subject = f"【SHM 智能鑑價網】我想購買您的「{item_title}」"
+                                mail_body = f"您好！\n\n我在 SHM AI 認證平台上看到您上架的商品：「{item_title}」，售價為 NT$ {item_price}。\n請問商品還在嗎？希望能與您進一步討論交易細節，謝謝！"
+                                safe_subject = urllib.parse.quote(mail_subject)
+                                safe_body = urllib.parse.quote(mail_body)
+                                gmail_link = f"https://mail.google.com/mail/?view=cm&fs=1&to={contact_info}&su={safe_subject}&body={safe_body}"
+                                contact_html = f'<a href="{gmail_link}" target="_blank" style="display: block; width: 100%; text-align: center; background-color: #EA4335; color: white; padding: 10px 0; border-radius: 8px; font-weight: bold; text-decoration: none; margin-top: 15px;">✉️ 開啟 Gmail 聯絡賣家</a>'
+                            elif contact_info:
+                                contact_html = f'<div style="width: 100%; text-align: center; background-color: #E8F0FE; color: #1967D2; padding: 10px 0; border-radius: 8px; font-weight: bold; margin-top: 15px; border: 1px solid #D2E3FC;">📱 Line/電話：{contact_info}</div>'
+                            else:
+                                contact_html = f'<div style="width: 100%; text-align: center; background-color: #F8F9FA; color: #aaa; padding: 10px 0; border-radius: 8px; font-weight: bold; margin-top: 15px; border: 1px solid #E0E0E0;">🚫 未提供聯絡方式</div>'
 
+                        # 繪製卡片本體
                         st.markdown(f"""
-                        <div style="background-color: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; border: 1px solid #E0E0E0;">
+                        <div style="{card_style}">
+                            {stamp_html}
                             {img_html}
                             <span style="background-color: #FF4B4B; color: white; padding: 3px 8px; border-radius: 15px; font-size: 12px; font-weight: bold;">{item.get('評分', 'N/A')}</span>
                             <h4 style="margin-top: 10px; color: #333; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{item_title}">{item_title}</h4>
@@ -401,6 +413,26 @@ with tab2:
                             {contact_html}
                         </div>
                         """, unsafe_allow_html=True)
+                        
+                        # === 🆕 賣家管理區塊 (下架/標記售出) ===
+                        if status != '已售出':
+                            with st.expander("⚙️ 管理商品 (標記售出)", expanded=False):
+                                verify_contact = st.text_input("請輸入您上架時留的聯絡方式以驗證：", key=f"verify_{i}_{item.get('sheet_row')}")
+                                if st.button("✅ 確認標記為已售出", key=f"btn_sold_{i}_{item.get('sheet_row')}"):
+                                    if verify_contact == contact_info:
+                                        with st.spinner("正在更新商品狀態..."):
+                                            try:
+                                                # 更新 Google Sheet 的 I 欄 (第 9 欄)
+                                                sheet.update_cell(item['sheet_row'], 9, "已售出")
+                                                st.success("成功！此商品已標記為售出。")
+                                                time.sleep(1)
+                                                st.rerun()
+                                            except Exception as e:
+                                                st.error(f"更新失敗，請檢查權限: {e}")
+                                    else:
+                                        st.error("驗證失敗：聯絡方式不符，無法修改此商品狀態！")
+                        else:
+                            st.markdown("<br>", unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"無法讀取商城資料，請檢查資料庫連線或表頭設定：{e}")
