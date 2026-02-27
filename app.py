@@ -59,7 +59,7 @@ with st.sidebar:
     st.markdown("---")
     st.info("🛡️ 本平台由 AI 嚴格審查圖片品質，不合格之照片將無法進入鑑價與上架流程，敬請配合。")
 
-# === 🆕 核心修改：將營運後台改為「賣家中心」 ===
+# 分頁設定
 tab_home, tab1, tab2, tab_seller = st.tabs(["🏠 平台首頁", "📤 上傳鑑價", "🛒 二手尋寶商城", "📦 賣家中心"])
 
 # ==========================================
@@ -202,7 +202,12 @@ with tab1:
                 status_text.empty()
                 
             except Exception as e:
-                st.error(f"分析失敗: {e}")
+                # === 🆕 核心防呆：捕捉 API 限制 (429 Error) 並顯示友善提示 ===
+                error_msg = str(e).lower()
+                if "429" in error_msg or "quota" in error_msg:
+                    st.error("⏳ 目前全站使用人數較多，AI 鑑價伺服器暫時滿載！請等待約 1 分鐘後再重新點擊分析。")
+                else:
+                    st.error(f"❌ 分析失敗，請檢查照片或重試: {e}")
 
         if st.session_state.analysis_done:
             data = st.session_state.data
@@ -463,6 +468,7 @@ with tab2:
                             else:
                                 contact_html = f'<div style="width: 100%; text-align: center; background-color: #F8F9FA; color: #aaa; padding: 10px 0; border-radius: 8px; font-weight: bold; margin-top: 15px; border: 1px solid #E0E0E0;">🚫 未提供聯絡方式</div>'
 
+                        # HTML 必須靠左對齊，防止 Markdown 縮排錯誤
                         st.markdown(
 f"""<div style="{card_style}">
 {stamp_html}
@@ -505,12 +511,10 @@ with tab_seller:
     st.header("📦 賣家專屬中心")
     st.caption("請輸入您的聯絡方式，查看並管理您專屬的商品營運數據。")
     
-    # 偽登入：使用聯絡方式當作身分驗證
     seller_id = st.text_input("🔑 請輸入您上架時使用的聯絡方式 (Email/電話/Line ID)：")
     
     if seller_id:
         try:
-            # 讀取資料庫
             key_dict = json.loads(st.secrets["google_credentials"])
             scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
             creds = Credentials.from_service_account_info(key_dict, scopes=scopes)
@@ -523,12 +527,10 @@ with tab_seller:
             else:
                 df = pd.DataFrame(records)
                 
-                # === 🌟 隱藏的老闆後門 (上帝視角) ===
-                if seller_id == "shm_wei":
+                if seller_id == "shm_admin":
                     st.success("🔐 解鎖成功！歡迎回來，老闆 (全站數據模式)。")
-                    my_df = df # 老闆看全部
+                    my_df = df
                 else:
-                    # 一般賣家模式：只過濾出聯絡方式相符的商品
                     my_df = df[df['聯絡方式'] == seller_id]
                 
                 if my_df.empty:
@@ -539,7 +541,6 @@ with tab_seller:
                     
                     st.divider()
                     
-                    # 計算該賣家的核心指標
                     total_items = len(my_df)
                     sold_items = len(my_df[my_df['商品狀態'] == '已售出'])
                     active_items = total_items - sold_items
@@ -552,7 +553,6 @@ with tab_seller:
                         except:
                             pass
                     
-                    # 顯示專屬數字指標
                     st.subheader("💡 您的銷售指標")
                     col1, col2, col3, col4 = st.columns(4)
                     col1.metric("您的總上架數", f"{total_items} 件")
@@ -562,7 +562,6 @@ with tab_seller:
                     
                     st.markdown("<br>", unsafe_allow_html=True)
                     
-                    # 畫圖表與明細
                     st.subheader("📊 您的商品明細")
                     chart_col1, chart_col2 = st.columns([1, 2])
                     
@@ -573,7 +572,6 @@ with tab_seller:
                         
                     with chart_col2:
                         st.write("**您的上架清單 (最新排序)**")
-                        # 整理顯示給賣家看的乾淨表格
                         recent_df = my_df[['上架時間', '商品標題', '預售價格', '商品狀態']].iloc[::-1]
                         st.dataframe(recent_df, use_container_width=True, hide_index=True)
                         
