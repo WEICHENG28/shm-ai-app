@@ -300,27 +300,73 @@ with tab2:
         if not records:
             st.info("目前商城還沒有商品，趕快去上架第一個商品吧！")
         else:
-            cols = st.columns(3)
-            for i, item in enumerate(reversed(records)):
-                with cols[i % 3]:
-                    # --- 🖼️ 讀取圖片網址並轉換成 HTML ---
-                    img_src = item.get('圖片網址', '')
-                    if img_src:
-                        img_html = f'<img src="{img_src}" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 10px;">'
-                    else:
-                        img_html = '<div style="width: 100%; height: 200px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; color: #aaa;">無圖片</div>'
-                    
-                    st.markdown(f"""
-                    <div style="background-color: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; border: 1px solid #E0E0E0;">
-                        {img_html}
-                        <span style="background-color: #FF4B4B; color: white; padding: 3px 8px; border-radius: 15px; font-size: 12px; font-weight: bold;">{item.get('評分', 'N/A')}</span>
-                        <h4 style="margin-top: 10px; color: #333; font-size: 16px;">{item.get('商品標題', '未命名商品')}</h4>
-                        <h2 style="color: #28a745; margin: 10px 0;">NT$ {item.get('預售價格', '0')}</h2>
-                        <p style="font-size: 13px; color: #666; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">{item.get('描述', '無商品描述')}</p>
-                        <hr style="margin: 10px 0;">
-                        <p style="font-size: 12px; color: #888; margin: 0;">👤 賣家：{item.get('賣家稱呼', '匿名')}</p>
-                        <p style="font-size: 12px; color: #888; margin: 0;">✉️ 聯絡：{item.get('聯絡方式', '無')}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
+            # === 🔍 新增：搜尋與篩選區塊 ===
+            st.markdown("### 🔍 篩選商品")
+            with st.container():
+                col_search, col_price, col_score = st.columns(3)
+                with col_search:
+                    search_term = st.text_input("關鍵字搜尋", placeholder="例如：PUMA, 滑鼠...")
+                with col_price:
+                    max_price = st.number_input("最高預算 (NT$)", min_value=0, value=10000, step=100)
+                with col_score:
+                    min_score = st.slider("最低新舊評分", min_value=1.0, max_value=10.0, value=1.0, step=0.5)
+            
+            st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
+
+            # === ⚙️ 執行篩選邏輯 ===
+            filtered_records = []
+            for item in reversed(records):
+                # 1. 關鍵字過濾
+                title = str(item.get('商品標題', '')).lower()
+                desc = str(item.get('描述', '')).lower()
+                if search_term and search_term.lower() not in title and search_term.lower() not in desc:
+                    continue
+                
+                # 2. 價格過濾
+                try:
+                    price = int(str(item.get('預售價格', '0')).replace(',', ''))
+                except:
+                    price = 0
+                if price > max_price:
+                    continue
+                
+                # 3. 評分過濾
+                try:
+                    score_str = str(item.get('評分', '0/10')).split('/')[0]
+                    score = float(score_str)
+                except:
+                    score = 0.0
+                if score < min_score:
+                    continue
+                
+                # 若通過所有考驗，則加入顯示清單
+                filtered_records.append(item)
+
+            # === 🖼️ 顯示過濾後的商品 ===
+            if not filtered_records:
+                st.warning("找不到符合條件的商品，請調整上面的篩選條件喔！")
+            else:
+                cols = st.columns(3)
+                for i, item in enumerate(filtered_records):
+                    with cols[i % 3]:
+                        img_src = item.get('圖片網址', '')
+                        if img_src:
+                            img_html = f'<img src="{img_src}" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 10px;">'
+                        else:
+                            img_html = '<div style="width: 100%; height: 200px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; color: #aaa;">無圖片</div>'
+                        
+                        # 標題加入單行截斷 (避免標題太長破壞版面)
+                        st.markdown(f"""
+                        <div style="background-color: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; border: 1px solid #E0E0E0;">
+                            {img_html}
+                            <span style="background-color: #FF4B4B; color: white; padding: 3px 8px; border-radius: 15px; font-size: 12px; font-weight: bold;">{item.get('評分', 'N/A')}</span>
+                            <h4 style="margin-top: 10px; color: #333; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{item.get('商品標題', '未命名商品')}">{item.get('商品標題', '未命名商品')}</h4>
+                            <h2 style="color: #28a745; margin: 10px 0;">NT$ {item.get('預售價格', '0')}</h2>
+                            <p style="font-size: 13px; color: #666; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">{item.get('描述', '無商品描述')}</p>
+                            <hr style="margin: 10px 0;">
+                            <p style="font-size: 12px; color: #888; margin: 0;">👤 賣家：{item.get('賣家稱呼', '匿名')}</p>
+                            <p style="font-size: 12px; color: #888; margin: 0;">✉️ 聯絡：{item.get('聯絡方式', '無')}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
     except Exception as e:
         st.error(f"無法讀取商城資料，請檢查資料庫連線或表頭設定：{e}")
