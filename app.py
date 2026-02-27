@@ -11,6 +11,7 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime
 import requests
 import base64
+import urllib.parse # 🆕 新增：用來將中文轉換成網址安全格式
 
 # 設定網頁標題
 st.set_page_config(page_title="SHM 智能鑑價網", page_icon="💎", layout="wide")
@@ -216,7 +217,6 @@ with tab1:
                     default_title = f"【AI認證】{data.get('brand')} {data.get('model')} - {data.get('condition_score')}成新"
                     title = st.text_input("商品標題", value=default_title)
                     
-                    # === 🔒 核心升級：強制限制定價範圍 ===
                     try:
                         clean_str = ai_price_range.replace(',', '')
                         prices = [int(n) for n in re.findall(r'\d+', clean_str)]
@@ -230,7 +230,6 @@ with tab1:
                             min_price, max_price = 0, 100000
                             
                         avg_price = int(sum(prices)/len(prices)) if prices else 500
-                        # 防呆：確保預設值不會超出範圍
                         if avg_price < min_price: avg_price = min_price
                         if avg_price > max_price: avg_price = max_price
                     except:
@@ -238,7 +237,6 @@ with tab1:
                     
                     st.info(f"🛡️ **為確保平台公信力，您的定價必須符合 AI 鑑價區間：NT$ {min_price} - {max_price}**")
                     
-                    # 加入 min_value 和 max_value 鎖定輸入框
                     price = st.number_input(
                         "💰 您的最終上架價格 (TWD)", 
                         min_value=min_price, 
@@ -369,24 +367,28 @@ with tab2:
                         else:
                             img_html = '<div style="width: 100%; height: 200px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; color: #aaa;">無圖片</div>'
                         
-                        # === 🆕 完美融合卡片：按鈕不跑版設計 ===
                         contact_info = str(item.get('聯絡方式', ''))
                         item_title = str(item.get('商品標題', '未命名商品'))
                         item_price = str(item.get('預售價格', '0'))
                         
-                        # 判斷聯絡方式並生成純 HTML 按鈕
                         contact_html = ""
                         if "@" in contact_info:
+                            # === 🆕 核心升級：直接產生 Gmail 網頁版快捷連結 ===
                             mail_subject = f"【SHM 智能鑑價網】我想購買您的「{item_title}」"
-                            mail_body = f"您好！%0D%0A%0D%0A我在 SHM AI 認證平台上看到您上架的商品：「{item_title}」，售價為 NT$ {item_price}。%0D%0A請問商品還在嗎？希望能與您進一步討論交易細節，謝謝！"
-                            mail_link = f"mailto:{contact_info}?subject={mail_subject}&body={mail_body}"
-                            contact_html = f'<a href="{mail_link}" target="_blank" style="display: block; width: 100%; text-align: center; background-color: #FF4B4B; color: white; padding: 10px 0; border-radius: 8px; font-weight: bold; text-decoration: none; margin-top: 15px;">✉️ 發送 Email 聯絡賣家</a>'
+                            mail_body = f"您好！\n\n我在 SHM AI 認證平台上看到您上架的商品：「{item_title}」，售價為 NT$ {item_price}。\n請問商品還在嗎？希望能與您進一步討論交易細節，謝謝！"
+                            
+                            safe_subject = urllib.parse.quote(mail_subject)
+                            safe_body = urllib.parse.quote(mail_body)
+                            
+                            gmail_link = f"https://mail.google.com/mail/?view=cm&fs=1&to={contact_info}&su={safe_subject}&body={safe_body}"
+                            
+                            # 按鈕改成更明確的提示，並換成 Gmail 經典的紅色
+                            contact_html = f'<a href="{gmail_link}" target="_blank" style="display: block; width: 100%; text-align: center; background-color: #EA4335; color: white; padding: 10px 0; border-radius: 8px; font-weight: bold; text-decoration: none; margin-top: 15px;">✉️ 開啟 Gmail 聯絡賣家</a>'
                         elif contact_info:
                             contact_html = f'<div style="width: 100%; text-align: center; background-color: #E8F0FE; color: #1967D2; padding: 10px 0; border-radius: 8px; font-weight: bold; margin-top: 15px; border: 1px solid #D2E3FC;">📱 Line/電話：{contact_info}</div>'
                         else:
                             contact_html = f'<div style="width: 100%; text-align: center; background-color: #F8F9FA; color: #aaa; padding: 10px 0; border-radius: 8px; font-weight: bold; margin-top: 15px; border: 1px solid #E0E0E0;">🚫 未提供聯絡方式</div>'
 
-                        # 將所有元素包裝在同一個 DIV 中
                         st.markdown(f"""
                         <div style="background-color: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; border: 1px solid #E0E0E0;">
                             {img_html}
