@@ -9,6 +9,8 @@ import re
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
+import requests
+import base64
 
 # 設定網頁標題
 st.set_page_config(page_title="SHM 智能鑑價網", page_icon="💎", layout="wide")
@@ -53,13 +55,12 @@ with tab1:
     if not os.path.exists("test_data"):
         os.makedirs("test_data")
 
-    # --- 關鍵修正：初始化上傳器 Key ---
+    # 初始化上傳器 Key
     if "uploader_key" not in st.session_state:
         st.session_state.uploader_key = 0
     
     col_upload, col_empty = st.columns([2, 1])
     with col_upload:
-        # --- 關鍵修正：綁定 key 參數 ---
         uploaded_files = st.file_uploader(
             "拖曳或點擊上傳商品照片...", 
             type=["jpg", "png", "jpeg"], 
@@ -106,10 +107,9 @@ with tab1:
                     status_text.empty()
                     st.error(f"❌ **AI 影像審查未通過：** {data.get('rejection_reason')}")
                     st.warning("💡 為了確保平台鑑價公信力，請根據上述提示重新拍攝，並再次上傳照片。")
-                    st.stop() # 立刻終止程式，不往下查價、也不讓賣家上架！
-                # ==========================================
-
-                # 2. 獲取市場數據 (審查通過才會執行到這裡)
+                    st.stop()
+                
+                # 2. 獲取市場數據
                 status_text.text("📊 正在分析二手市場行情 & 比對新品價格...")
                 progress_bar.progress(60)
                 raw_model = data.get('model', '')
@@ -120,12 +120,13 @@ with tab1:
                 used_items = scraper.get_used_market_data(search_query, ai_price_range)
                 new_item = scraper.get_new_price_pchome(search_query)
                 
-                # 存入 Session State
+                # 存入 Session State (並記住第一張照片準備上傳)
                 st.session_state.data = data
                 st.session_state.search_query = search_query
                 st.session_state.ai_price_range = ai_price_range
                 st.session_state.used_items = used_items
                 st.session_state.new_item = new_item
+                st.session_state.main_image_path = saved_paths[0] if saved_paths else None
                 st.session_state.analysis_done = True
                 
                 progress_bar.progress(100)
@@ -243,8 +244,22 @@ with tab1:
                         if not contact_info:
                             st.error("請填寫聯絡方式，以便買家聯繫您！")
                         else:
-                            with st.spinner("🔄 正在安全寫入系統資料庫..."):
+                            with st.spinner("🔄 正在上傳圖片與寫入資料庫..."):
                                 try:
+                                    # --- 📸 1. 上傳圖片到 ImgBB 圖床 ---
+                                    img_url = ""
+                                    if "main_image_path" in st.session_state and os.path.exists(st.session_state.main_image_path):
+                                        with open(st.session_state.main_image_path, "rb") as f:
+                                            img_bytes = f.read()
+                                        payload = {
+                                            "key": st.secrets["IMGBB_API_KEY"],
+                                            "image": base64.b64encode(img_bytes).decode('utf-8')
+                                        }
+                                        res = requests.post("https://api.imgbb.com/1/upload", data=payload)
+                                        if res.status_code == 200:
+                                            img_url = res.json()['data']['url']
+                                    
+                                    # --- 🗄️ 2. 寫入 Google Sheets ---
                                     key_dict = json.loads(st.secrets["google_credentials"])
                                     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
                                     creds = Credentials.from_service_account_info(key_dict, scopes=scopes)
@@ -252,20 +267,20 @@ with tab1:
                                     sheet = client.open("SHM_Database").sheet1
                                     
                                     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                    row_data = [current_time, title, str(price), f"{data.get('condition_score')}/10", seller_name, contact_info, desc]
+                                    # 注意：加入 img_url 到最後一欄
+                                    row_data = [current_time, title, str(price), f"{data.get('condition_score')}/10", seller_name, contact_info, desc, img_url]
                                     sheet.append_row(row_data)
                                     
                                     st.balloons() 
                                     st.success(f"✅ **上架成功！** 您的商品「{title}」已安全建檔進入雲端資料庫。畫面將在 3 秒後自動重置。")
                                     
-                                    # === 核心修復：清除狀態並重置上傳器 ===
                                     time.sleep(3)
                                     st.session_state.analysis_done = False
-                                    st.session_state.uploader_key += 1 # 強制換 Key，銷毀舊上傳器
+                                    st.session_state.uploader_key += 1 
                                     st.rerun()
                                     
                                 except Exception as e:
-                                    st.error(f"❌ 資料庫連線失敗: {e}")
+                                    st.error(f"❌ 上架失敗，請檢查設定: {e}")
 
 with tab2:
     st.header("🛒 二手尋寶商城")
@@ -288,16 +303,23 @@ with tab2:
             cols = st.columns(3)
             for i, item in enumerate(reversed(records)):
                 with cols[i % 3]:
+                    # --- 🖼️ 讀取圖片網址並轉換成 HTML ---
+                    img_src = item.get('圖片網址', '')
+                    if img_src:
+                        img_html = f'<img src="{img_src}" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 10px;">'
+                    else:
+                        img_html = '<div style="width: 100%; height: 200px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; color: #aaa;">無圖片</div>'
+                    
                     st.markdown(f"""
                     <div style="background-color: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; border: 1px solid #E0E0E0;">
+                        {img_html}
                         <span style="background-color: #FF4B4B; color: white; padding: 3px 8px; border-radius: 15px; font-size: 12px; font-weight: bold;">{item.get('評分', 'N/A')}</span>
-                        <h4 style="margin-top: 10px; color: #333;">{item.get('商品標題', '未命名商品')}</h4>
+                        <h4 style="margin-top: 10px; color: #333; font-size: 16px;">{item.get('商品標題', '未命名商品')}</h4>
                         <h2 style="color: #28a745; margin: 10px 0;">NT$ {item.get('預售價格', '0')}</h2>
                         <p style="font-size: 13px; color: #666; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">{item.get('描述', '無商品描述')}</p>
                         <hr style="margin: 10px 0;">
                         <p style="font-size: 12px; color: #888; margin: 0;">👤 賣家：{item.get('賣家稱呼', '匿名')}</p>
                         <p style="font-size: 12px; color: #888; margin: 0;">✉️ 聯絡：{item.get('聯絡方式', '無')}</p>
-                        <p style="font-size: 10px; color: #aaa; margin-top: 5px; text-align: right;">上架時間: {item.get('上架時間', '')}</p>
                     </div>
                     """, unsafe_allow_html=True)
     except Exception as e:
