@@ -364,10 +364,10 @@ with tab2:
                         </div>
                         """, unsafe_allow_html=True)
                         
-                        # === 🆕 一鍵聯絡賣家按鈕 (接在商品卡片正下方) ===
-                        contact_info = item.get('聯絡方式', '')
-                        item_title = item.get('商品標題', '未命名商品')
-                        item_price = item.get('預售價格', '0')
+                        # === 🆕 修復：加入 str() 強制轉型，避免數字被當成 int 而報錯 ===
+                        contact_info = str(item.get('聯絡方式', ''))
+                        item_title = str(item.get('商品標題', '未命名商品'))
+                        item_price = str(item.get('預售價格', '0'))
                         
                         st.markdown('<div style="background-color: white; padding: 0 15px 15px 15px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; border: 1px solid #E0E0E0; border-top: none;">', unsafe_allow_html=True)
                         if "@" in contact_info:
