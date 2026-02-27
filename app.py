@@ -13,6 +13,7 @@ import requests
 import base64
 import urllib.parse
 import pandas as pd
+from PIL import Image # 🆕 新增：用於圖片自動壓縮處理
 
 # 設定網頁標題
 st.set_page_config(page_title="SHM 智能鑑價網", page_icon="💎", layout="wide")
@@ -141,11 +142,23 @@ with tab1:
         cols = st.columns(len(uploaded_files))
         saved_paths = []
         for idx, uploaded_file in enumerate(uploaded_files):
-            file_path = os.path.join("test_data", uploaded_file.name)
-            with open(file_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
+            # 副檔名統一改成 .jpg
+            file_name_no_ext = os.path.splitext(uploaded_file.name)[0]
+            file_path = os.path.join("test_data", f"{file_name_no_ext}_compressed.jpg")
+            
+            # === 🆕 圖片無感壓縮機制 (省下 90% AI 額度) ===
+            img = Image.open(uploaded_file)
+            # 將圖片轉為 RGB 模式 (避免 PNG 透明背景存檔報錯)
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            # 等比例縮小，最長邊不超過 800 像素
+            img.thumbnail((800, 800))
+            # 以中等品質存檔
+            img.save(file_path, "JPEG", quality=80)
+            
             saved_paths.append(file_path)
             with cols[idx]:
+                # 預覽依然顯示原本的圖片，不影響視覺
                 st.image(uploaded_file, use_container_width=True, caption=f"圖 {idx+1}")
 
         st.markdown("<br>", unsafe_allow_html=True)
@@ -202,7 +215,7 @@ with tab1:
                 status_text.empty()
                 
             except Exception as e:
-                # === 🆕 核心防呆：捕捉 API 限制 (429 Error) 並顯示友善提示 ===
+                # 核心防呆：捕捉 API 限制 (429 Error) 並顯示友善提示
                 error_msg = str(e).lower()
                 if "429" in error_msg or "quota" in error_msg:
                     st.error("⏳ 目前全站使用人數較多，AI 鑑價伺服器暫時滿載！請等待約 1 分鐘後再重新點擊分析。")
@@ -468,7 +481,6 @@ with tab2:
                             else:
                                 contact_html = f'<div style="width: 100%; text-align: center; background-color: #F8F9FA; color: #aaa; padding: 10px 0; border-radius: 8px; font-weight: bold; margin-top: 15px; border: 1px solid #E0E0E0;">🚫 未提供聯絡方式</div>'
 
-                        # HTML 必須靠左對齊，防止 Markdown 縮排錯誤
                         st.markdown(
 f"""<div style="{card_style}">
 {stamp_html}
