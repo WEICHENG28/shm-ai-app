@@ -54,17 +54,27 @@ st.markdown("""
         border-color: #FF4B4B !important;
     }
     
-    /* 商城圖片浮動特效 */
+    /* 商城圖片樣式 (拿掉容易誤導的 hover 放大特效) */
     .marketplace-img {
         width: 100%; 
         height: 200px; 
         object-fit: cover; 
         border-radius: 8px; 
         margin-bottom: 10px;
-        transition: transform 0.3s ease;
     }
-    .marketplace-img:hover {
-        transform: scale(1.03);
+    
+    /* 多圖畫廊的縮圖特效 */
+    .thumb-img {
+        width: 100%; 
+        aspect-ratio: 1; 
+        object-fit: cover; 
+        border-radius: 8px; 
+        border: 2px solid #EEEEEE; 
+        transition: 0.2s;
+    }
+    .thumb-img:hover {
+        border-color: #FF4B4B;
+        opacity: 0.8;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -230,7 +240,8 @@ with tab1:
                 st.session_state.ai_price_range = ai_price_range
                 st.session_state.used_items = used_items
                 st.session_state.new_item = new_item
-                st.session_state.main_image_path = saved_paths[0] if saved_paths else None
+                # === 🆕 核心修正：儲存「所有」圖片的路徑，準備全部上傳 ===
+                st.session_state.all_image_paths = saved_paths 
                 st.session_state.analysis_done = True
                 
                 progress_bar.progress(100)
@@ -370,19 +381,25 @@ with tab1:
                         if not contact_info:
                             st.error("請填寫聯絡方式，以便買家聯繫您！")
                         else:
-                            with st.spinner("🔄 正在上傳圖片與寫入資料庫..."):
+                            with st.spinner("🔄 正在打包上傳您的多張商品圖片... 請稍候..."):
                                 try:
-                                    img_url = ""
-                                    if "main_image_path" in st.session_state and os.path.exists(st.session_state.main_image_path):
-                                        with open(st.session_state.main_image_path, "rb") as f:
-                                            img_bytes = f.read()
-                                        payload = {
-                                            "key": st.secrets["IMGBB_API_KEY"],
-                                            "image": base64.b64encode(img_bytes).decode('utf-8')
-                                        }
-                                        res = requests.post("https://api.imgbb.com/1/upload", data=payload)
-                                        if res.status_code == 200:
-                                            img_url = res.json()['data']['url']
+                                    uploaded_img_urls = []
+                                    # === 🆕 核心升級：將所有上傳的照片批次上傳至 ImgBB ===
+                                    if "all_image_paths" in st.session_state and st.session_state.all_image_paths:
+                                        for path in st.session_state.all_image_paths:
+                                            if os.path.exists(path):
+                                                with open(path, "rb") as f:
+                                                    img_bytes = f.read()
+                                                payload = {
+                                                    "key": st.secrets["IMGBB_API_KEY"],
+                                                    "image": base64.b64encode(img_bytes).decode('utf-8')
+                                                }
+                                                res = requests.post("https://api.imgbb.com/1/upload", data=payload)
+                                                if res.status_code == 200:
+                                                    uploaded_img_urls.append(res.json()['data']['url'])
+                                    
+                                    # 將所有網址用逗號串接起來存入資料庫
+                                    final_img_string = ",".join(uploaded_img_urls)
                                     
                                     key_dict = json.loads(st.secrets["google_credentials"])
                                     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -391,7 +408,8 @@ with tab1:
                                     sheet = client.open("SHM_Database").sheet1
                                     
                                     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                    row_data = [current_time, title, str(price), f"{data.get('condition_score')}/10", seller_name, contact_info, desc, img_url, "上架中"]
+                                    # 寫入多圖字串 final_img_string
+                                    row_data = [current_time, title, str(price), f"{data.get('condition_score')}/10", seller_name, contact_info, desc, final_img_string, "上架中"]
                                     sheet.append_row(row_data)
                                     
                                     st.balloons() 
@@ -410,7 +428,7 @@ with tab1:
 # ==========================================
 with tab2:
     
-    # === 🌟 如果有選擇商品，顯示【商品詳情頁】(類蝦皮體驗) ===
+    # === 🌟 如果有選擇商品，顯示【商品詳情頁】(類蝦皮多圖畫廊體驗) ===
     if st.session_state.selected_item is not None:
         item = st.session_state.selected_item
         
@@ -418,13 +436,24 @@ with tab2:
         st.button("⬅️ 返回商城列表", on_click=back_to_market)
         st.divider()
         
-        # 左右分欄：左邊大圖，右邊詳細資訊
         col_img, col_details = st.columns([1, 1.2])
         
         with col_img:
-            img_src = item.get('圖片網址', '')
-            if img_src:
-                st.markdown(f'<img src="{img_src}" style="width: 100%; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">', unsafe_allow_html=True)
+            # 🆕 讀取用逗號分隔的所有圖片網址
+            all_imgs = [url.strip() for url in str(item.get('圖片網址', '')).split(',') if url.strip()]
+            
+            if all_imgs:
+                main_img = all_imgs[0]
+                # 顯示大主圖
+                st.markdown(f'<img src="{main_img}" style="width: 100%; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 15px;">', unsafe_allow_html=True)
+                
+                # 顯示下方的小縮圖 (畫廊模式)
+                if len(all_imgs) > 1:
+                    thumb_cols = st.columns(len(all_imgs))
+                    for idx, thumb in enumerate(all_imgs):
+                        with thumb_cols[idx]:
+                            # 縮圖加上超連結，點擊可開新分頁看原圖
+                            st.markdown(f'<a href="{thumb}" target="_blank" title="點擊檢視大圖"><img src="{thumb}" class="thumb-img"></a>', unsafe_allow_html=True)
             else:
                 st.info("此商品未提供圖片")
                 
@@ -500,7 +529,7 @@ with tab2:
     # === 🌟 如果沒有選擇商品，顯示【商城列表頁】 ===
     else:
         st.header("🛒 二手尋寶商城")
-        st.caption("點擊下方商品卡片，即可查看大圖與商品詳情！")
+        st.caption("點擊下方商品卡片，即可查看多張實拍圖與商品詳情！")
         
         if st.button("🔄 刷新商城資料"):
             st.rerun()
@@ -563,15 +592,17 @@ with tab2:
                 if not filtered_records:
                     st.warning("找不到符合條件的商品，請調整上面的篩選條件喔！")
                 else:
-                    # === 🆕 乾淨俐落的網格卡片 ===
-                    cols = st.columns(4) # 改成一行 4 個，更像一般電商
+                    # 乾淨俐落的網格卡片
+                    cols = st.columns(4) 
                     for i, item in enumerate(filtered_records):
                         with cols[i % 4]:
-                            with st.container(border=True): # Streamlit 內建漂亮的卡片邊框
-                                img_src = item.get('圖片網址', '')
+                            with st.container(border=True): 
+                                # 取出第一張照片作為首圖
+                                all_imgs = [url.strip() for url in str(item.get('圖片網址', '')).split(',') if url.strip()]
+                                img_src = all_imgs[0] if all_imgs else ''
                                 status = str(item.get('商品狀態', '上架中'))
                                 
-                                # 圖片與售出印章
+                                # 圖片與售出印章 (拿掉騙人的 hover 放大)
                                 if status == '已售出':
                                     st.markdown(f"""
                                     <div style="position: relative;">
@@ -580,7 +611,10 @@ with tab2:
                                     </div>
                                     """, unsafe_allow_html=True)
                                 else:
-                                    st.markdown(f'<img src="{img_src}" class="marketplace-img">', unsafe_allow_html=True)
+                                    if img_src:
+                                        st.markdown(f'<img src="{img_src}" class="marketplace-img">', unsafe_allow_html=True)
+                                    else:
+                                        st.markdown('<div class="marketplace-img" style="background-color: #f0f2f6; display: flex; align-items: center; justify-content: center; color: #aaa;">無圖片</div>', unsafe_allow_html=True)
                                 
                                 # 標題與價格
                                 st.markdown(f"<div style='font-size: 14px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #333;' title=\"{item.get('商品標題', '未命名')}\">{item.get('商品標題', '未命名')}</div>", unsafe_allow_html=True)
