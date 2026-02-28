@@ -693,8 +693,8 @@ with tab_seller:
             else:
                 df = pd.DataFrame(records)
                 
-                if seller_id == "shm_admin":
-                    st.success("🔐 解鎖成功！歡迎回來，老闆 (全站數據模式)。")
+                if seller_id == "shm_wei":
+                    st.success("🔐 解鎖成功！歡迎回來，帥哥 (全站數據模式)。")
                     my_df = df
                 else:
                     my_df = df[df['聯絡方式'] == seller_id]
