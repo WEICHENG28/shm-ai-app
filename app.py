@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components # 🆕 新增：用來打造蝦皮級的互動相簿與控制滑動
 import os
 import json
 import ai_engine
@@ -37,13 +38,11 @@ st.markdown("""
     a:hover {color: #FF4B4B !important;}
     h1, h2, h3 { color: #111111 !important; }
     
-    /* 首頁專屬美化 */
     .hero-section { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); padding: 40px; border-radius: 15px; color: white; text-align: center; margin-bottom: 30px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
     .hero-title { font-size: 2.5rem !important; font-weight: 800; color: white !important; margin-bottom: 15px;}
     .hero-subtitle { font-size: 1.2rem; color: #e0e0e0; margin-bottom: 20px; }
     .step-card { background-color: white; padding: 25px 20px; border-radius: 12px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); height: 100%; border-top: 4px solid #FF4B4B;}
     
-    /* UX升級：強制顯示輸入框邊框，解決盲點問題 */
     [data-baseweb="input"], [data-baseweb="textarea"] {
         background-color: #FFFFFF !important;
         border: 2px solid #D1D5DB !important;
@@ -54,27 +53,12 @@ st.markdown("""
         border-color: #FF4B4B !important;
     }
     
-    /* 商城圖片樣式 (拿掉容易誤導的 hover 放大特效) */
     .marketplace-img {
         width: 100%; 
         height: 200px; 
         object-fit: cover; 
         border-radius: 8px; 
         margin-bottom: 10px;
-    }
-    
-    /* 多圖畫廊的縮圖特效 */
-    .thumb-img {
-        width: 100%; 
-        aspect-ratio: 1; 
-        object-fit: cover; 
-        border-radius: 8px; 
-        border: 2px solid #EEEEEE; 
-        transition: 0.2s;
-    }
-    .thumb-img:hover {
-        border-color: #FF4B4B;
-        opacity: 0.8;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -240,7 +224,6 @@ with tab1:
                 st.session_state.ai_price_range = ai_price_range
                 st.session_state.used_items = used_items
                 st.session_state.new_item = new_item
-                # === 🆕 核心修正：儲存「所有」圖片的路徑，準備全部上傳 ===
                 st.session_state.all_image_paths = saved_paths 
                 st.session_state.analysis_done = True
                 
@@ -384,7 +367,6 @@ with tab1:
                             with st.spinner("🔄 正在打包上傳您的多張商品圖片... 請稍候..."):
                                 try:
                                     uploaded_img_urls = []
-                                    # === 🆕 核心升級：將所有上傳的照片批次上傳至 ImgBB ===
                                     if "all_image_paths" in st.session_state and st.session_state.all_image_paths:
                                         for path in st.session_state.all_image_paths:
                                             if os.path.exists(path):
@@ -398,7 +380,6 @@ with tab1:
                                                 if res.status_code == 200:
                                                     uploaded_img_urls.append(res.json()['data']['url'])
                                     
-                                    # 將所有網址用逗號串接起來存入資料庫
                                     final_img_string = ",".join(uploaded_img_urls)
                                     
                                     key_dict = json.loads(st.secrets["google_credentials"])
@@ -408,7 +389,6 @@ with tab1:
                                     sheet = client.open("SHM_Database").sheet1
                                     
                                     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                    # 寫入多圖字串 final_img_string
                                     row_data = [current_time, title, str(price), f"{data.get('condition_score')}/10", seller_name, contact_info, desc, final_img_string, "上架中"]
                                     sheet.append_row(row_data)
                                     
@@ -430,6 +410,10 @@ with tab2:
     
     # === 🌟 如果有選擇商品，顯示【商品詳情頁】(類蝦皮多圖畫廊體驗) ===
     if st.session_state.selected_item is not None:
+        
+        # 🆕 解決痛點一：強制捲動到網頁最頂端，解決滑動迷路問題！
+        components.html("<script>window.parent.scrollTo({top: 0, behavior: 'smooth'});</script>", height=0)
+        
         item = st.session_state.selected_item
         
         # 返回按鈕
@@ -439,21 +423,87 @@ with tab2:
         col_img, col_details = st.columns([1, 1.2])
         
         with col_img:
-            # 🆕 讀取用逗號分隔的所有圖片網址
+            # 取出所有圖片
             all_imgs = [url.strip() for url in str(item.get('圖片網址', '')).split(',') if url.strip()]
             
             if all_imgs:
-                main_img = all_imgs[0]
-                # 顯示大主圖
-                st.markdown(f'<img src="{main_img}" style="width: 100%; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 15px;">', unsafe_allow_html=True)
+                # === 🆕 解決痛點二：蝦皮級「互動式多圖畫廊」 ===
+                # 我們用 HTML/JS 打造一個不需要重新整理就能切換照片的模組
+                gallery_html = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                <style>
+                    body {{ margin: 0; font-family: sans-serif; }}
+                    .main-img-container {{
+                        width: 100%;
+                        height: 400px;
+                        border-radius: 12px;
+                        overflow: hidden;
+                        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+                        margin-bottom: 15px;
+                        background-color: #f8f9fa;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                    }}
+                    .main-img {{
+                        max-width: 100%;
+                        max-height: 100%;
+                        object-fit: contain;
+                    }}
+                    .thumb-container {{
+                        display: flex;
+                        gap: 12px;
+                        overflow-x: auto;
+                        padding: 5px 2px;
+                    }}
+                    .thumb-img {{
+                        width: 75px;
+                        height: 75px;
+                        object-fit: cover;
+                        border-radius: 8px;
+                        border: 2px solid transparent;
+                        cursor: pointer;
+                        transition: all 0.2s ease;
+                        opacity: 0.7;
+                    }}
+                    /* 仿蝦皮：滑鼠移入或選中時出現紅框並變亮 */
+                    .thumb-img:hover, .thumb-img.active {{
+                        border-color: #FF4B4B;
+                        opacity: 1;
+                    }}
+                    .thumb-container::-webkit-scrollbar {{ display: none; }}
+                </style>
+                <script>
+                    function changeMainImg(element, src) {{
+                        document.getElementById('mainImage').src = src;
+                        var thumbs = document.getElementsByClassName('thumb-img');
+                        for (var i = 0; i < thumbs.length; i++) {{
+                            thumbs[i].classList.remove('active');
+                        }}
+                        element.classList.add('active');
+                    }}
+                </script>
+                </head>
+                <body>
+                    <div class="main-img-container">
+                        <img id="mainImage" class="main-img" src="{all_imgs[0]}">
+                    </div>
+                    <div class="thumb-container">
+                """
+                # 生成下方縮圖 (加上 onmouseover 和 onclick 事件)
+                for i, img_url in enumerate(all_imgs):
+                    active_class = " active" if i == 0 else ""
+                    gallery_html += f'<img class="thumb-img{active_class}" src="{img_url}" onmouseover="changeMainImg(this, \'{img_url}\')" onclick="changeMainImg(this, \'{img_url}\')">'
                 
-                # 顯示下方的小縮圖 (畫廊模式)
-                if len(all_imgs) > 1:
-                    thumb_cols = st.columns(len(all_imgs))
-                    for idx, thumb in enumerate(all_imgs):
-                        with thumb_cols[idx]:
-                            # 縮圖加上超連結，點擊可開新分頁看原圖
-                            st.markdown(f'<a href="{thumb}" target="_blank" title="點擊檢視大圖"><img src="{thumb}" class="thumb-img"></a>', unsafe_allow_html=True)
+                gallery_html += """
+                    </div>
+                </body>
+                </html>
+                """
+                # 將做好的高階組件塞入 Streamlit
+                components.html(gallery_html, height=550)
             else:
                 st.info("此商品未提供圖片")
                 
@@ -464,13 +514,11 @@ with tab2:
             price = item.get('預售價格', '0')
             contact_info = str(item.get('聯絡方式', ''))
             
-            # 狀態與標題
             st.markdown(f"""
             <span style="background-color: #FF4B4B; color: white; padding: 4px 12px; border-radius: 20px; font-size: 14px; font-weight: bold;">評分 {score}</span>
             <h2 style="margin-top: 10px; color: #222;">{title}</h2>
             """, unsafe_allow_html=True)
             
-            # 價格區塊
             st.markdown(f"""
             <div style="background-color: #F8F9FA; padding: 20px; border-radius: 10px; margin: 15px 0; border: 1px solid #E0E0E0;">
                 <p style="margin: 0; color: #666; font-size: 14px;">直購價</p>
@@ -481,7 +529,6 @@ with tab2:
             st.markdown(f"**👤 賣家：** {item.get('賣家稱呼', '匿名')}")
             st.markdown(f"**🕒 上架時間：** {item.get('上架時間', '未知')}")
             
-            # === 購買/聯絡按鈕 ===
             st.markdown("<br>", unsafe_allow_html=True)
             if status == '已售出':
                 st.markdown('<div style="background-color: #ddd; color: #666; text-align: center; padding: 15px; border-radius: 8px; font-weight: bold; font-size: 18px; letter-spacing: 2px;">🛑 此商品已售出</div>', unsafe_allow_html=True)
@@ -502,7 +549,6 @@ with tab2:
             st.markdown("#### 📝 商品詳細描述")
             st.write(item.get('描述', '無商品描述'))
             
-            # === 賣家管理區塊 (收納至詳情頁底部) ===
             st.markdown("<br><br>", unsafe_allow_html=True)
             if status != '已售出':
                 with st.expander("⚙️ 賣家管理 (標記售出 / 下架)"):
@@ -519,7 +565,7 @@ with tab2:
                                     sheet.update_cell(item['sheet_row'], 9, "已售出")
                                     st.success("成功！此商品已標記為售出。")
                                     time.sleep(1.5)
-                                    st.session_state.selected_item = None # 回到列表
+                                    st.session_state.selected_item = None 
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"更新失敗，請檢查權限: {e}")
@@ -592,17 +638,14 @@ with tab2:
                 if not filtered_records:
                     st.warning("找不到符合條件的商品，請調整上面的篩選條件喔！")
                 else:
-                    # 乾淨俐落的網格卡片
                     cols = st.columns(4) 
                     for i, item in enumerate(filtered_records):
                         with cols[i % 4]:
                             with st.container(border=True): 
-                                # 取出第一張照片作為首圖
                                 all_imgs = [url.strip() for url in str(item.get('圖片網址', '')).split(',') if url.strip()]
                                 img_src = all_imgs[0] if all_imgs else ''
                                 status = str(item.get('商品狀態', '上架中'))
                                 
-                                # 圖片與售出印章 (拿掉騙人的 hover 放大)
                                 if status == '已售出':
                                     st.markdown(f"""
                                     <div style="position: relative;">
@@ -616,11 +659,9 @@ with tab2:
                                     else:
                                         st.markdown('<div class="marketplace-img" style="background-color: #f0f2f6; display: flex; align-items: center; justify-content: center; color: #aaa;">無圖片</div>', unsafe_allow_html=True)
                                 
-                                # 標題與價格
                                 st.markdown(f"<div style='font-size: 14px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #333;' title=\"{item.get('商品標題', '未命名')}\">{item.get('商品標題', '未命名')}</div>", unsafe_allow_html=True)
                                 st.markdown(f"<div style='color: #FF4B4B; font-size: 18px; font-weight: bold; margin-top: 5px;'>NT$ {item.get('預售價格', '0')}</div>", unsafe_allow_html=True)
                                 
-                                # 點擊查看詳情按鈕
                                 if st.button("🔍 查看詳情", key=f"view_{item['sheet_row']}", use_container_width=True):
                                     st.session_state.selected_item = item
                                     st.rerun()
