@@ -13,12 +13,12 @@ import requests
 import base64
 import urllib.parse
 import pandas as pd
-from PIL import Image # 🆕 新增：用於圖片自動壓縮處理
+from PIL import Image 
 
 # 設定網頁標題
 st.set_page_config(page_title="SHM 智能鑑價網", page_icon="💎", layout="wide")
 
-# === 🎨 介面美化 ===
+# === 🎨 介面美化 (大幅升級輸入框與圖片特效) ===
 st.markdown("""
     <style>
     .stApp { background-color: #F0F2F6; }
@@ -35,6 +35,32 @@ st.markdown("""
     .hero-title { font-size: 2.5rem !important; font-weight: 800; color: white !important; margin-bottom: 15px;}
     .hero-subtitle { font-size: 1.2rem; color: #e0e0e0; margin-bottom: 20px; }
     .step-card { background-color: white; padding: 25px 20px; border-radius: 12px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); height: 100%; border-top: 4px solid #FF4B4B;}
+    
+    /* 🆕 UX升級 1：強制顯示輸入框邊框，解決盲點問題 */
+    [data-baseweb="input"], [data-baseweb="textarea"] {
+        background-color: #FFFFFF !important;
+        border: 2px solid #D1D5DB !important;
+        border-radius: 8px !important;
+        transition: border-color 0.3s;
+    }
+    [data-baseweb="input"]:focus-within, [data-baseweb="textarea"]:focus-within {
+        border-color: #FF4B4B !important;
+    }
+    
+    /* 🆕 UX升級 2：商城的照片互動特效 (滑鼠移入放大) */
+    .marketplace-img {
+        width: 100%; 
+        height: 200px; 
+        object-fit: cover; 
+        border-radius: 8px; 
+        margin-bottom: 10px;
+        transition: transform 0.3s ease;
+        cursor: pointer;
+    }
+    .marketplace-img:hover {
+        transform: scale(1.03);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -142,23 +168,17 @@ with tab1:
         cols = st.columns(len(uploaded_files))
         saved_paths = []
         for idx, uploaded_file in enumerate(uploaded_files):
-            # 副檔名統一改成 .jpg
             file_name_no_ext = os.path.splitext(uploaded_file.name)[0]
             file_path = os.path.join("test_data", f"{file_name_no_ext}_compressed.jpg")
             
-            # === 🆕 圖片無感壓縮機制 (省下 90% AI 額度) ===
             img = Image.open(uploaded_file)
-            # 將圖片轉為 RGB 模式 (避免 PNG 透明背景存檔報錯)
             if img.mode != 'RGB':
                 img = img.convert('RGB')
-            # 等比例縮小，最長邊不超過 800 像素
             img.thumbnail((800, 800))
-            # 以中等品質存檔
             img.save(file_path, "JPEG", quality=80)
             
             saved_paths.append(file_path)
             with cols[idx]:
-                # 預覽依然顯示原本的圖片，不影響視覺
                 st.image(uploaded_file, use_container_width=True, caption=f"圖 {idx+1}")
 
         st.markdown("<br>", unsafe_allow_html=True)
@@ -215,7 +235,6 @@ with tab1:
                 status_text.empty()
                 
             except Exception as e:
-                # 核心防呆：捕捉 API 限制 (429 Error) 並顯示友善提示
                 error_msg = str(e).lower()
                 if "429" in error_msg or "quota" in error_msg:
                     st.error("⏳ 目前全站使用人數較多，AI 鑑價伺服器暫時滿載！請等待約 1 分鐘後再重新點擊分析。")
@@ -459,15 +478,18 @@ with tab2:
                         item_price = str(item.get('預售價格', '0'))
                         status = str(item.get('商品狀態', '上架中'))
                         
+                        # === 🆕 UX升級 2：加入連結 <a> 標籤，讓圖片可以點擊放大 ===
                         if status == '已售出':
                             card_style = "background-color: #f8f9fa; padding: 15px; border-radius: 12px; border: 1px solid #ddd; margin-bottom: 20px; opacity: 0.6; filter: grayscale(80%); position: relative;"
                             stamp_html = '<div style="position: absolute; top: 30px; right: 10px; background-color: #555; color: white; padding: 5px 15px; font-weight: bold; transform: rotate(15deg); border-radius: 5px; font-size: 14px; letter-spacing: 2px; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2); z-index: 10;">SOLD</div>'
-                            img_html = f'<img src="{img_src}" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 10px;">' if img_src else '<div style="width: 100%; height: 200px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; color: #aaa;">無圖片</div>'
+                            # 即使售出也可以點開看大圖
+                            img_html = f'<a href="{img_src}" target="_blank" title="點擊查看大圖"><img src="{img_src}" class="marketplace-img" style="opacity: 0.8;"></a>' if img_src else '<div style="width: 100%; height: 200px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; color: #aaa;">無圖片</div>'
                             contact_html = f'<div style="width: 100%; text-align: center; background-color: #ddd; color: #666; padding: 10px 0; border-radius: 8px; font-weight: bold; margin-top: 15px;">🚫 商品已售出</div>'
                         else:
                             card_style = "background-color: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 5px; border: 1px solid #E0E0E0; position: relative;"
                             stamp_html = ''
-                            img_html = f'<img src="{img_src}" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 10px;">' if img_src else '<div style="width: 100%; height: 200px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; color: #aaa;">無圖片</div>'
+                            # 正常圖片加上超連結與 Hover 動畫
+                            img_html = f'<a href="{img_src}" target="_blank" title="點擊查看大圖"><img src="{img_src}" class="marketplace-img"></a>' if img_src else '<div style="width: 100%; height: 200px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; color: #aaa;">無圖片</div>'
                             
                             if "@" in contact_info:
                                 mail_subject = f"【SHM 智能鑑價網】我想購買您的「{item_title}」"
@@ -539,7 +561,7 @@ with tab_seller:
             else:
                 df = pd.DataFrame(records)
                 
-                if seller_id == "shm_wei":
+                if seller_id == "shm_admin":
                     st.success("🔐 解鎖成功！歡迎回來，老闆 (全站數據模式)。")
                     my_df = df
                 else:
