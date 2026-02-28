@@ -13,12 +13,19 @@ import requests
 import base64
 import urllib.parse
 import pandas as pd
-from PIL import Image 
+from PIL import Image
 
 # 設定網頁標題
 st.set_page_config(page_title="SHM 智能鑑價網", page_icon="💎", layout="wide")
 
-# === 🎨 介面美化 (大幅升級輸入框與圖片特效) ===
+# 初始化 session state (用於控制是否顯示商品詳情頁)
+if "selected_item" not in st.session_state:
+    st.session_state.selected_item = None
+
+def back_to_market():
+    st.session_state.selected_item = None
+
+# === 🎨 介面美化 ===
 st.markdown("""
     <style>
     .stApp { background-color: #F0F2F6; }
@@ -36,7 +43,7 @@ st.markdown("""
     .hero-subtitle { font-size: 1.2rem; color: #e0e0e0; margin-bottom: 20px; }
     .step-card { background-color: white; padding: 25px 20px; border-radius: 12px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); height: 100%; border-top: 4px solid #FF4B4B;}
     
-    /* 🆕 UX升級 1：強制顯示輸入框邊框，解決盲點問題 */
+    /* UX升級：強制顯示輸入框邊框，解決盲點問題 */
     [data-baseweb="input"], [data-baseweb="textarea"] {
         background-color: #FFFFFF !important;
         border: 2px solid #D1D5DB !important;
@@ -47,7 +54,7 @@ st.markdown("""
         border-color: #FF4B4B !important;
     }
     
-    /* 🆕 UX升級 2：商城的照片互動特效 (滑鼠移入放大) */
+    /* 商城圖片浮動特效 */
     .marketplace-img {
         width: 100%; 
         height: 200px; 
@@ -55,11 +62,9 @@ st.markdown("""
         border-radius: 8px; 
         margin-bottom: 10px;
         transition: transform 0.3s ease;
-        cursor: pointer;
     }
     .marketplace-img:hover {
         transform: scale(1.03);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
     </style>
     """, unsafe_allow_html=True)
@@ -404,139 +409,191 @@ with tab1:
 # 🛒 二手商城區塊 (Tab 2)
 # ==========================================
 with tab2:
-    st.header("🛒 二手尋寶商城")
-    st.caption("這裡展示了平台上所有經過 AI 鑑價認證的二手好物！")
     
-    if st.button("🔄 刷新商城商品"):
-        st.rerun()
-
-    try:
-        key_dict = json.loads(st.secrets["google_credentials"])
-        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        creds = Credentials.from_service_account_info(key_dict, scopes=scopes)
-        client = gspread.authorize(creds)
-        sheet = client.open("SHM_Database").sheet1
-        records = sheet.get_all_records() 
+    # === 🌟 如果有選擇商品，顯示【商品詳情頁】(類蝦皮體驗) ===
+    if st.session_state.selected_item is not None:
+        item = st.session_state.selected_item
         
-        for idx, r in enumerate(records):
-            r['sheet_row'] = idx + 2
-
-        if not records:
-            st.info("目前商城還沒有商品，趕快去上架第一個商品吧！")
-        else:
-            st.markdown("### 🔍 篩選商品")
-            with st.container():
-                col_search, col_price, col_score = st.columns(3)
-                with col_search:
-                    search_term = st.text_input("關鍵字搜尋", placeholder="例如：PUMA, 滑鼠...")
-                with col_price:
-                    max_price = st.number_input("最高預算 (NT$)", min_value=0, value=10000, step=100)
-                with col_score:
-                    min_score = st.slider("最低新舊評分", min_value=1.0, max_value=10.0, value=1.0, step=0.5)
-            
-            show_sold = st.checkbox("👁️ 顯示已售出商品 (歷史成交參考)", value=False)
-            
-            st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
-
-            filtered_records = []
-            for item in reversed(records):
-                status = str(item.get('商品狀態', '上架中'))
-                if status == '已售出' and not show_sold:
-                    continue 
-                
-                title = str(item.get('商品標題', '')).lower()
-                desc = str(item.get('描述', '')).lower()
-                if search_term and search_term.lower() not in title and search_term.lower() not in desc:
-                    continue
-                
-                try:
-                    price = int(str(item.get('預售價格', '0')).replace(',', ''))
-                except:
-                    price = 0
-                if price > max_price:
-                    continue
-                
-                try:
-                    score_str = str(item.get('評分', '0/10')).split('/')[0]
-                    score = float(score_str)
-                except:
-                    score = 0.0
-                if score < min_score:
-                    continue
-                
-                filtered_records.append(item)
-
-            if not filtered_records:
-                st.warning("找不到符合條件的商品，請調整上面的篩選條件喔！")
+        # 返回按鈕
+        st.button("⬅️ 返回商城列表", on_click=back_to_market)
+        st.divider()
+        
+        # 左右分欄：左邊大圖，右邊詳細資訊
+        col_img, col_details = st.columns([1, 1.2])
+        
+        with col_img:
+            img_src = item.get('圖片網址', '')
+            if img_src:
+                st.markdown(f'<img src="{img_src}" style="width: 100%; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">', unsafe_allow_html=True)
             else:
-                cols = st.columns(3)
-                for i, item in enumerate(filtered_records):
-                    with cols[i % 3]:
-                        img_src = item.get('圖片網址', '')
-                        contact_info = str(item.get('聯絡方式', ''))
-                        item_title = str(item.get('商品標題', '未命名商品'))
-                        item_price = str(item.get('預售價格', '0'))
-                        status = str(item.get('商品狀態', '上架中'))
-                        
-                        # === 🆕 UX升級 2：加入連結 <a> 標籤，讓圖片可以點擊放大 ===
-                        if status == '已售出':
-                            card_style = "background-color: #f8f9fa; padding: 15px; border-radius: 12px; border: 1px solid #ddd; margin-bottom: 20px; opacity: 0.6; filter: grayscale(80%); position: relative;"
-                            stamp_html = '<div style="position: absolute; top: 30px; right: 10px; background-color: #555; color: white; padding: 5px 15px; font-weight: bold; transform: rotate(15deg); border-radius: 5px; font-size: 14px; letter-spacing: 2px; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2); z-index: 10;">SOLD</div>'
-                            # 即使售出也可以點開看大圖
-                            img_html = f'<a href="{img_src}" target="_blank" title="點擊查看大圖"><img src="{img_src}" class="marketplace-img" style="opacity: 0.8;"></a>' if img_src else '<div style="width: 100%; height: 200px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; color: #aaa;">無圖片</div>'
-                            contact_html = f'<div style="width: 100%; text-align: center; background-color: #ddd; color: #666; padding: 10px 0; border-radius: 8px; font-weight: bold; margin-top: 15px;">🚫 商品已售出</div>'
+                st.info("此商品未提供圖片")
+                
+        with col_details:
+            status = str(item.get('商品狀態', '上架中'))
+            score = item.get('評分', 'N/A')
+            title = item.get('商品標題', '未命名商品')
+            price = item.get('預售價格', '0')
+            contact_info = str(item.get('聯絡方式', ''))
+            
+            # 狀態與標題
+            st.markdown(f"""
+            <span style="background-color: #FF4B4B; color: white; padding: 4px 12px; border-radius: 20px; font-size: 14px; font-weight: bold;">評分 {score}</span>
+            <h2 style="margin-top: 10px; color: #222;">{title}</h2>
+            """, unsafe_allow_html=True)
+            
+            # 價格區塊
+            st.markdown(f"""
+            <div style="background-color: #F8F9FA; padding: 20px; border-radius: 10px; margin: 15px 0; border: 1px solid #E0E0E0;">
+                <p style="margin: 0; color: #666; font-size: 14px;">直購價</p>
+                <h1 style="color: #FF4B4B; margin: 0; font-size: 36px;">NT$ {price}</h1>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown(f"**👤 賣家：** {item.get('賣家稱呼', '匿名')}")
+            st.markdown(f"**🕒 上架時間：** {item.get('上架時間', '未知')}")
+            
+            # === 購買/聯絡按鈕 ===
+            st.markdown("<br>", unsafe_allow_html=True)
+            if status == '已售出':
+                st.markdown('<div style="background-color: #ddd; color: #666; text-align: center; padding: 15px; border-radius: 8px; font-weight: bold; font-size: 18px; letter-spacing: 2px;">🛑 此商品已售出</div>', unsafe_allow_html=True)
+            else:
+                if "@" in contact_info:
+                    mail_subject = f"【SHM 智能鑑價網】我想購買您的「{title}」"
+                    mail_body = f"您好！\n\n我在 SHM AI 認證平台上看到您上架的商品：「{title}」，售價為 NT$ {price}。\n請問商品還在嗎？希望能與您進一步討論交易細節，謝謝！"
+                    safe_subject = urllib.parse.quote(mail_subject)
+                    safe_body = urllib.parse.quote(mail_body)
+                    gmail_link = f"https://mail.google.com/mail/?view=cm&fs=1&to={contact_info}&su={safe_subject}&body={safe_body}"
+                    st.markdown(f'<a href="{gmail_link}" target="_blank" style="display: block; width: 100%; text-align: center; background-color: #EA4335; color: white; padding: 15px 0; border-radius: 8px; font-weight: bold; font-size: 18px; text-decoration: none; box-shadow: 0 4px 6px rgba(234,67,53,0.3);">✉️ 立即發送 Email 聯絡賣家</a>', unsafe_allow_html=True)
+                elif contact_info:
+                    st.markdown(f'<div style="width: 100%; text-align: center; background-color: #E8F0FE; color: #1967D2; padding: 15px 0; border-radius: 8px; font-weight: bold; font-size: 18px; border: 1px solid #D2E3FC;">📱 賣家聯絡方式：{contact_info}</div>', unsafe_allow_html=True)
+                else:
+                    st.warning("賣家未提供聯絡方式")
+            
+            st.divider()
+            st.markdown("#### 📝 商品詳細描述")
+            st.write(item.get('描述', '無商品描述'))
+            
+            # === 賣家管理區塊 (收納至詳情頁底部) ===
+            st.markdown("<br><br>", unsafe_allow_html=True)
+            if status != '已售出':
+                with st.expander("⚙️ 賣家管理 (標記售出 / 下架)"):
+                    verify_contact = st.text_input("請輸入您上架時留的聯絡方式以驗證身分：")
+                    if st.button("✅ 確認標記為已售出", type="primary"):
+                        if verify_contact == contact_info:
+                            with st.spinner("正在更新商品狀態..."):
+                                try:
+                                    key_dict = json.loads(st.secrets["google_credentials"])
+                                    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+                                    creds = Credentials.from_service_account_info(key_dict, scopes=scopes)
+                                    client = gspread.authorize(creds)
+                                    sheet = client.open("SHM_Database").sheet1
+                                    sheet.update_cell(item['sheet_row'], 9, "已售出")
+                                    st.success("成功！此商品已標記為售出。")
+                                    time.sleep(1.5)
+                                    st.session_state.selected_item = None # 回到列表
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"更新失敗，請檢查權限: {e}")
                         else:
-                            card_style = "background-color: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 5px; border: 1px solid #E0E0E0; position: relative;"
-                            stamp_html = ''
-                            # 正常圖片加上超連結與 Hover 動畫
-                            img_html = f'<a href="{img_src}" target="_blank" title="點擊查看大圖"><img src="{img_src}" class="marketplace-img"></a>' if img_src else '<div style="width: 100%; height: 200px; background-color: #f0f2f6; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; color: #aaa;">無圖片</div>'
-                            
-                            if "@" in contact_info:
-                                mail_subject = f"【SHM 智能鑑價網】我想購買您的「{item_title}」"
-                                mail_body = f"您好！\n\n我在 SHM AI 認證平台上看到您上架的商品：「{item_title}」，售價為 NT$ {item_price}。\n請問商品還在嗎？希望能與您進一步討論交易細節，謝謝！"
-                                safe_subject = urllib.parse.quote(mail_subject)
-                                safe_body = urllib.parse.quote(mail_body)
-                                gmail_link = f"https://mail.google.com/mail/?view=cm&fs=1&to={contact_info}&su={safe_subject}&body={safe_body}"
-                                contact_html = f'<a href="{gmail_link}" target="_blank" style="display: block; width: 100%; text-align: center; background-color: #EA4335; color: white; padding: 10px 0; border-radius: 8px; font-weight: bold; text-decoration: none; margin-top: 15px;">✉️ 開啟 Gmail 聯絡賣家</a>'
-                            elif contact_info:
-                                contact_html = f'<div style="width: 100%; text-align: center; background-color: #E8F0FE; color: #1967D2; padding: 10px 0; border-radius: 8px; font-weight: bold; margin-top: 15px; border: 1px solid #D2E3FC;">📱 Line/電話：{contact_info}</div>'
-                            else:
-                                contact_html = f'<div style="width: 100%; text-align: center; background-color: #F8F9FA; color: #aaa; padding: 10px 0; border-radius: 8px; font-weight: bold; margin-top: 15px; border: 1px solid #E0E0E0;">🚫 未提供聯絡方式</div>'
+                            st.error("驗證失敗：聯絡方式不符，無法修改此商品狀態！")
 
-                        st.markdown(
-f"""<div style="{card_style}">
-{stamp_html}
-{img_html}
-<span style="background-color: #FF4B4B; color: white; padding: 3px 8px; border-radius: 15px; font-size: 12px; font-weight: bold;">{item.get('評分', 'N/A')}</span>
-<h4 style="margin-top: 10px; color: #333; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{item_title}">{item_title}</h4>
-<h2 style="color: #28a745; margin: 10px 0;">NT$ {item_price}</h2>
-<p style="font-size: 13px; color: #666; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 5px;">{item.get('描述', '無商品描述')}</p>
-<hr style="margin: 10px 0;">
-<p style="font-size: 12px; color: #888; margin: 0;">👤 賣家：{item.get('賣家稱呼', '匿名')}</p>
-{contact_html}
-</div>""", 
-                        unsafe_allow_html=True)
-                        
-                        if status != '已售出':
-                            with st.expander("⚙️ 管理商品 (標記售出)", expanded=False):
-                                verify_contact = st.text_input("請輸入您上架時留的聯絡方式以驗證：", key=f"verify_{i}_{item.get('sheet_row')}")
-                                if st.button("✅ 確認標記為已售出", key=f"btn_sold_{i}_{item.get('sheet_row')}"):
-                                    if verify_contact == contact_info:
-                                        with st.spinner("正在更新商品狀態..."):
-                                            try:
-                                                sheet.update_cell(item['sheet_row'], 9, "已售出")
-                                                st.success("成功！此商品已標記為售出。")
-                                                time.sleep(1)
-                                                st.rerun()
-                                            except Exception as e:
-                                                st.error(f"更新失敗，請檢查權限: {e}")
-                                    else:
-                                        st.error("驗證失敗：聯絡方式不符，無法修改此商品狀態！")
-                        else:
-                            st.markdown("<br>", unsafe_allow_html=True)
+    # === 🌟 如果沒有選擇商品，顯示【商城列表頁】 ===
+    else:
+        st.header("🛒 二手尋寶商城")
+        st.caption("點擊下方商品卡片，即可查看大圖與商品詳情！")
+        
+        if st.button("🔄 刷新商城資料"):
+            st.rerun()
 
-    except Exception as e:
-        st.error(f"無法讀取商城資料，請檢查資料庫連線或表頭設定：{e}")
+        try:
+            key_dict = json.loads(st.secrets["google_credentials"])
+            scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+            creds = Credentials.from_service_account_info(key_dict, scopes=scopes)
+            client = gspread.authorize(creds)
+            sheet = client.open("SHM_Database").sheet1
+            records = sheet.get_all_records() 
+            
+            for idx, r in enumerate(records):
+                r['sheet_row'] = idx + 2
+
+            if not records:
+                st.info("目前商城還沒有商品，趕快去上架第一個商品吧！")
+            else:
+                st.markdown("### 🔍 篩選商品")
+                with st.container():
+                    col_search, col_price, col_score = st.columns(3)
+                    with col_search:
+                        search_term = st.text_input("關鍵字搜尋", placeholder="例如：PUMA, 滑鼠...")
+                    with col_price:
+                        max_price = st.number_input("最高預算 (NT$)", min_value=0, value=10000, step=100)
+                    with col_score:
+                        min_score = st.slider("最低新舊評分", min_value=1.0, max_value=10.0, value=1.0, step=0.5)
+                
+                show_sold = st.checkbox("👁️ 顯示已售出商品 (歷史成交參考)", value=False)
+                st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
+
+                filtered_records = []
+                for item in reversed(records):
+                    status = str(item.get('商品狀態', '上架中'))
+                    if status == '已售出' and not show_sold:
+                        continue 
+                    
+                    title = str(item.get('商品標題', '')).lower()
+                    desc = str(item.get('描述', '')).lower()
+                    if search_term and search_term.lower() not in title and search_term.lower() not in desc:
+                        continue
+                    
+                    try:
+                        price = int(str(item.get('預售價格', '0')).replace(',', ''))
+                    except:
+                        price = 0
+                    if price > max_price:
+                        continue
+                    
+                    try:
+                        score_str = str(item.get('評分', '0/10')).split('/')[0]
+                        score = float(score_str)
+                    except:
+                        score = 0.0
+                    if score < min_score:
+                        continue
+                    
+                    filtered_records.append(item)
+
+                if not filtered_records:
+                    st.warning("找不到符合條件的商品，請調整上面的篩選條件喔！")
+                else:
+                    # === 🆕 乾淨俐落的網格卡片 ===
+                    cols = st.columns(4) # 改成一行 4 個，更像一般電商
+                    for i, item in enumerate(filtered_records):
+                        with cols[i % 4]:
+                            with st.container(border=True): # Streamlit 內建漂亮的卡片邊框
+                                img_src = item.get('圖片網址', '')
+                                status = str(item.get('商品狀態', '上架中'))
+                                
+                                # 圖片與售出印章
+                                if status == '已售出':
+                                    st.markdown(f"""
+                                    <div style="position: relative;">
+                                        <div style="position: absolute; top: 10px; right: 5px; background-color: #555; color: white; padding: 3px 10px; font-weight: bold; transform: rotate(15deg); border-radius: 5px; font-size: 12px; z-index: 10; border: 1px solid white;">SOLD</div>
+                                        <img src="{img_src}" class="marketplace-img" style="opacity: 0.5; filter: grayscale(80%);">
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                else:
+                                    st.markdown(f'<img src="{img_src}" class="marketplace-img">', unsafe_allow_html=True)
+                                
+                                # 標題與價格
+                                st.markdown(f"<div style='font-size: 14px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #333;' title=\"{item.get('商品標題', '未命名')}\">{item.get('商品標題', '未命名')}</div>", unsafe_allow_html=True)
+                                st.markdown(f"<div style='color: #FF4B4B; font-size: 18px; font-weight: bold; margin-top: 5px;'>NT$ {item.get('預售價格', '0')}</div>", unsafe_allow_html=True)
+                                
+                                # 點擊查看詳情按鈕
+                                if st.button("🔍 查看詳情", key=f"view_{item['sheet_row']}", use_container_width=True):
+                                    st.session_state.selected_item = item
+                                    st.rerun()
+
+        except Exception as e:
+            st.error(f"無法讀取商城資料，請檢查資料庫連線或表頭設定：{e}")
+
 
 # ==========================================
 # 📦 賣家專屬中心區塊 (Tab Seller)
