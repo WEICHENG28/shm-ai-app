@@ -1,12 +1,25 @@
 import google.generativeai as genai
 import PIL.Image
 import streamlit as st
+import random
 
-# 🔒 從 Streamlit 的隱藏密碼庫讀取 API KEY
-GOOGLE_API_KEY = st.secrets["GEMINI_API_KEY"]
+# === 🆕 核心升級：建立 4 把鑰匙的「鑰匙圈」 ===
+# 系統會從這四把金鑰中，隨機盲抽一把來使用，完美分散流量！
+api_keys = [
+    st.secrets["GEMINI_API_KEY_1"],
+    st.secrets["GEMINI_API_KEY_2"],
+    st.secrets["GEMINI_API_KEY_3"],
+    st.secrets["GEMINI_API_KEY_4"]
+]
 
-genai.configure(api_key=GOOGLE_API_KEY)
-model = genai.GenerativeModel('gemini-flash-latest')
+# 隨機抽取一把鑰匙
+chosen_key = random.choice(api_keys)
+
+# 告訴 Google 系統這次用這把被抽中的鑰匙
+genai.configure(api_key=chosen_key)
+
+# 初始化模型 (建議使用最新的 1.5 flash 版本名稱)
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 def analyze_multiple_items(image_paths):
     """
@@ -34,7 +47,6 @@ def analyze_multiple_items(image_paths):
     
     請確保只回傳純 JSON 格式，不要包含任何 Markdown 標籤（如 ```json）。
     """
-    
     
     content = [prompt] + images
     response = model.generate_content(content)
